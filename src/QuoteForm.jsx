@@ -5,7 +5,7 @@ const blank = () => ({ id: crypto.randomUUID(), name: '', description: '', sourc
 const money = value => new Intl.NumberFormat(undefined, { style: 'currency', currency: 'CAD' }).format(Number(value || 0))
 
 export default function QuoteForm({ job, quote, receipts = [], onSave, onClose }) {
-  const draftKey = `devante_quote_draft_${job?.id || 'default'}_${quote?.id || 'new'}`
+  const draftKey = `quintyne_realty_inc_quote_draft_${job?.id || 'default'}_${quote?.id || 'new'}`
   
   // Read saved draft on initial mount
   const initialDraft = useRef(null)
@@ -26,12 +26,12 @@ export default function QuoteForm({ job, quote, receipts = [], onSave, onClose }
   const defaultPaymentRef = quote?.payment_reference || `Please reference ${defaultQuoteNum} / PO ${quote?.po_number || job?.code || ''}`
 
   // Company / Contractor profile state
-  const [companyName, setCompanyName] = useState(draft?.companyName ?? quote?.company_name ?? 'Direct Connections')
-  const [contactName, setContactName] = useState(draft?.contactName ?? quote?.contact_name ?? 'Devante Williams-Morris')
+  const [companyName, setCompanyName] = useState(draft?.companyName ?? quote?.company_name ?? 'Quintyne Realty inc')
+  const [contactName, setContactName] = useState(draft?.contactName ?? quote?.contact_name ?? 'Quintyne Realty inc')
   const [taxNumber, setTaxNumber] = useState(draft?.taxNumber ?? quote?.tax_number ?? 'GST/HST #: 123456789RT0001')
   const [addressLine1, setAddressLine1] = useState(draft?.addressLine1 ?? quote?.address_line1 ?? '906-2301 Derry Road West')
   const [addressLine2, setAddressLine2] = useState(draft?.addressLine2 ?? quote?.address_line2 ?? 'Mississauga, ON, Canada L5N 2R4')
-  const [contactPhoneEmail, setContactPhoneEmail] = useState(draft?.contactPhoneEmail ?? quote?.contact_phone_email ?? '647-836-9906 · Devantetheelectrician@gmail.com')
+  const [contactPhoneEmail, setContactPhoneEmail] = useState(draft?.contactPhoneEmail ?? quote?.contact_phone_email ?? '')
 
   // Document metadata state
   const [docType, setDocType] = useState(draft?.docType ?? quote?.doc_type ?? 'QUOTE')
@@ -224,12 +224,12 @@ export default function QuoteForm({ job, quote, receipts = [], onSave, onClose }
     try {
       localStorage.removeItem(draftKey)
     } catch {}
-    setCompanyName(quote?.company_name ?? 'Direct Connections')
-    setContactName(quote?.contact_name ?? 'Devante Williams-Morris')
+    setCompanyName(quote?.company_name ?? 'Quintyne Realty inc')
+    setContactName(quote?.contact_name ?? 'Quintyne Realty inc')
     setTaxNumber(quote?.tax_number ?? 'GST/HST #: 123456789RT0001')
     setAddressLine1(quote?.address_line1 ?? '906-2301 Derry Road West')
     setAddressLine2(quote?.address_line2 ?? 'Mississauga, ON, Canada L5N 2R4')
-    setContactPhoneEmail(quote?.contact_phone_email ?? '647-836-9906 · Devantetheelectrician@gmail.com')
+    setContactPhoneEmail(quote?.contact_phone_email ?? '')
     setDocType(quote?.doc_type || 'QUOTE')
     setQuoteNumber(defaultQuoteNum)
     setQuoteDate(defaultDateStr)

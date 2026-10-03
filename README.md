@@ -1,13 +1,13 @@
-# Devante administration frontend
+# Quintyne Realty inc administration frontend
 
-React + Vite frontend for `D:\Dev\devante\back\devante_app_back`.
+React + Vite frontend for `D:\Dev\quintynerealty\back`.
 
 ## Run locally
 
 Start the backend on port 8002, then run:
 
 ```powershell
-cd D:\Dev\devante\front\devante_app_front
+cd D:\Dev\quintynerealty\front
 Copy-Item .env.example .env
 npm install
 npm run dev

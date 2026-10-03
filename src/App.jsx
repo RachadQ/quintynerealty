@@ -4,7 +4,7 @@ import { API_URL, api, signInUrl } from './api.js'
 import QuoteForm from './QuoteForm.jsx'
 import JobBudget from './JobBudget.jsx'
 import GasVehicles from './GasVehicles.jsx'
-import dwLogo from './assets/dw-services-logo.png'
+import companyLogo from './assets/quintyne-realty-logo.svg'
 
 const NAV = [
   ['jobs', 'Jobs', 'J'],
@@ -32,8 +32,8 @@ function Login({ status }) {
   const bypass = import.meta.env.VITE_AUTH_MODE === 'bypass'
   return <main className="login-shell">
     <section className="login-card">
-      <img className="brand-logo" src={dwLogo} alt="DW Services"/>
-      <p className="eyebrow">DEVANTE</p>
+      <img className="brand-logo" src={companyLogo} alt="Quintyne Realty inc"/>
+      <p className="eyebrow">Quintyne Realty inc</p>
       <h1>{pending ? 'Access request pending' : 'Welcome back'}</h1>
       <p className="muted">{pending ? 'Your account exists, but an administrator needs to activate it.' : bypass ? 'Development sign-in is bypassed. Start the backend and retry the connection.' : 'Sign in with your company Microsoft account to continue to the administration portal.'}</p>
       {!pending && !bypass && <a className="button microsoft" href={signInUrl}><span className="ms-grid">▪▪<br/>▪▪</span> Continue with Microsoft</a>}
@@ -613,18 +613,18 @@ export default function App() {
   const removeUser = async (user) => { if (!confirm(`Delete ${user.full_name}? This action disables their access.`)) return; try { await api(`/configuration/users/${user.id}`, { method: 'DELETE' }); flash('User deleted.'); await load() } catch (e) { flash(e.message, 'error') } }
   const logout = async () => { try { await api('/auth/logout', { method: 'POST' }) } finally { setReceiptJobs([]); setSession(null) } }
 
-  if (loading) return <div className="loading"><div className="spinner"/><span>Loading Devante…</span></div>
+  if (loading) return <div className="loading"><div className="spinner"/><span>Loading Quintyne Realty inc…</span></div>
   if (!session) return <Login status={status} />
 
   const changeView = (next) => { setView(next); setMobileMenu(false); window.scrollTo({ top: 0, behavior: 'smooth' }) }
   const activeJobCount = receiptJobs.filter(job => ['queued', 'processing'].includes(job.status)).length
   return <div className="shell">
     <aside>
-      <div className="brand"><img className="brand-logo small" src={dwLogo} alt="DW Services"/><div><strong>Devante</strong><span>Administration</span></div></div>
+      <div className="brand"><img className="brand-logo small" src={companyLogo} alt="Quintyne Realty inc"/><div><strong>Quintyne Realty inc</strong><span>Administration</span></div></div>
       <nav>{NAV.map(([id, label, icon]) => <div className="nav-group" key={id}><button className={view === id ? 'active' : ''} onClick={() => changeView(id)}><span>{icon}</span>{label}</button>{id === 'jobs' && view === 'jobs' && <div className="job-subnav" role="navigation" aria-label="Job sections">{JOB_SECTIONS.map(([section, name]) => <button key={section} className={`${jobSection === section || (section === 'receipts' && jobSection === 'gas') ? 'active' : ''} ${section === 'gas' ? 'nested' : ''}`} onClick={() => setJobSection(section)}>{name}</button>)}</div>}</div>)}</nav>
       <div className="account"><div className="avatar">{initials(session.user.full_name)}</div><div><strong>{session.user.full_name}</strong><span>{session.user.email}</span></div><button onClick={logout} title="Sign out">↪</button></div>
     </aside>
-    <header className="mobile-header"><img className="brand-logo small" src={dwLogo} alt="DW Services"/><div><strong>Devante</strong><span>{NAV.find(n => n[0] === view)?.[1]}</span></div><button onClick={logout} aria-label="Sign out">↪</button></header>
+    <header className="mobile-header"><img className="brand-logo small" src={companyLogo} alt="Quintyne Realty inc"/><div><strong>Quintyne Realty inc</strong><span>{NAV.find(n => n[0] === view)?.[1]}</span></div><button onClick={logout} aria-label="Sign out">↪</button></header>
     <main className="content">
       <header className="topbar"><div><p className="eyebrow">ADMINISTRATION PORTAL</p><h1>{NAV.find(n => n[0] === view)?.[1]}</h1></div><div className={`live ${activeJobCount ? 'processing' : ''}`}><i/> {activeJobCount ? `Processing ${activeJobCount} receipt${activeJobCount > 1 ? 's' : ''}…` : 'Secure session'}</div></header>
       {notice && <div className={`notice ${notice.type}`}>{notice.text}<button onClick={() => setNotice(null)}>×</button></div>}

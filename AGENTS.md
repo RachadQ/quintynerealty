@@ -1,6 +1,6 @@
 # Frontend agent guidance
 
-This is the mobile-first React client for the Devante FastAPI service. The primary users work from phones while travelling or on job sites. Desktop support remains important, but phone usability takes precedence.
+This is the mobile-first React client for the Quintyne Realty inc FastAPI service. The primary users work from phones while travelling or on job sites. Desktop support remains important, but phone usability takes precedence.
 
 ## Stack and commands
 
