@@ -13,8 +13,21 @@ function apiOrigin() {
 
 export const API_URL = apiOrigin()
 
-function cookie(name) {
-  return document.cookie.split('; ').find((item) => item.startsWith(`${name}=`))?.split('=').slice(1).join('=')
+let csrfToken = ''
+let csrfRequest = null
+let localAuthBypass = false
+async function getCsrfToken() {
+  if (localAuthBypass && import.meta.env.DEV) return ''
+  if (csrfToken) return csrfToken
+  if (!csrfRequest) {
+    csrfRequest = api('/auth/csrf').then(data => {
+      if (import.meta.env.DEV && data.dev_auth_bypass === true) { localAuthBypass = true; return '' }
+      if (!data.csrf_token) throw new Error('Could not initialize session security. Please sign in again.')
+      csrfToken = data.csrf_token
+      return csrfToken
+    }).finally(() => { csrfRequest = null })
+  }
+  return csrfRequest
 }
 
 function sanitizeExternalUrls(value) {
@@ -33,24 +46,34 @@ function sanitizeExternalUrls(value) {
 
 export async function api(path, options = {}) {
   if (typeof path !== 'string' || !path.startsWith('/') || path.startsWith('//')) throw new Error('Invalid API path')
+  if (import.meta.env.PROD && !import.meta.env.VITE_API_URL) {
+    throw new Error('VITE_API_URL is missing from this deployment. Set it to the backend URL in Vercel and redeploy the frontend.')
+  }
   const { responseType, ...requestOptions } = options
   const method = options.method || 'GET'
   const headers = { Accept: responseType === 'blob' ? 'application/pdf' : 'application/json', ...options.headers }
   if (options.body && !(options.body instanceof FormData)) headers['Content-Type'] = 'application/json'
-  if (!['GET', 'HEAD'].includes(method.toUpperCase())) {
-    const csrf = cookie('csrf_token')
-    if (csrf) headers['X-CSRF-Token'] = decodeURIComponent(csrf)
+  if (!['GET', 'HEAD', 'OPTIONS'].includes(method.toUpperCase()) && path !== '/auth/google') {
+    const csrf = await getCsrfToken()
+    if (csrf) headers['X-CSRF-Token'] = csrf
   }
   const response = await fetch(`${API_URL}${path}`, { ...requestOptions, method, headers, credentials: 'include' })
   if (response.status === 204) return null
   if (response.ok && responseType === 'blob') return response.blob()
-  const data = await response.json().catch(() => ({}))
+  const contentType = response.headers.get('content-type') || ''
+  if (!contentType.includes('application/json') && !contentType.includes('+json')) {
+    throw new Error(`The API returned a webpage or non-JSON response (${response.status}). Check VITE_API_URL and the backend deployment.`)
+  }
+  let data
+  try { data = await response.json() }
+  catch { throw new Error('The backend returned invalid JSON. Check the backend deployment.') }
+  if (response.ok && data?.csrf_token) csrfToken = data.csrf_token
+  if (import.meta.env.DEV && response.ok && data?.dev_auth_bypass === true) localAuthBypass = true
+  if (response.status === 401 || (response.ok && path === '/auth/logout')) csrfToken = ''
   if (!response.ok) {
-    const error = new Error(data.detail || `Request failed (${response.status})`)
+    const error = new Error(data?.detail || `Request failed (${response.status})`)
     error.status = response.status
     throw error
   }
   return sanitizeExternalUrls(data)
 }
-
-export const signInUrl = `${API_URL}/auth/microsoft/login`

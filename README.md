@@ -22,7 +22,7 @@ FRONTEND_URL=http://localhost:5174
 CORS_ALLOWED_ORIGINS=http://localhost:5174
 ```
 
-Microsoft OAuth credentials and MongoDB must also be configured in the backend before authentication can complete.
+A Google OAuth Web client ID and MongoDB must be configured in the backend before Google sign-in can complete.
 
 The frontend also includes receipt screenshot capture, automatic OCR review, Google Drive links, business activity filters, and weekly/monthly/yearly profit-and-loss reports. See the backend README for Drive service-account setup. Non-super-admin roles need the appropriate `RECEIPTS_*` permissions.
 
@@ -56,3 +56,11 @@ OneDrive year and month folders use the reviewed receipt date, not the upload da
 Each saved trip updates one app-managed `Trip Log <year>.csv` spreadsheet in `Quintyne Realty/<year>`. CSV opens in Excel. The log includes all non-deleted trips across vehicles and months for that calendar year, with date, vehicle, business/personal type, From, To, kilometres, estimated litres used, notes, and a stable trip ID. The first upload uses a temporary unique filename, then renames the managed file to `Trip Log <year>.csv`. Existing name conflicts are reported without overwriting another file. Later updates reuse the same OneDrive file ID.
 
 The spreadsheet is rebuilt from saved trip records, so retries do not duplicate rows. It is a generated report; make corrections in the app because later syncs replace its contents. If OneDrive is disconnected or an update fails, the trip remains saved and the form shows a retry action. `POST /vehicles/{vehicle_id}/trips/{trip_id}/sync-spreadsheet` retries without creating another trip. Concurrent updates use a shared MongoDB lease. Receipt folders remain organized by year/category/month; each annual trip log stays directly in its year folder.
+
+
+## Frontend deployment API URL
+
+In Vercel, set `VITE_API_URL` to the backend HTTPS origin for the relevant Production/Preview environment, then redeploy the frontend. Vite embeds this value during the build. The frontend catch-all rewrite serves the app UI and does not proxy backend APIs. Leaving the production API URL unset used to request `/auth/bootstrap` from the frontend, receive `index.html`, and crash while reading `session.user.full_name`. Missing settings and invalid API/session responses now show a visible error instead.
+
+
+The login screen uses the Google Identity Services flow from Devante. The backend verifies the credential and requires an existing active user account. Microsoft sign-in is used for connecting OneDrive storage only. Set `GOOGLE_OAUTH_CLIENT_ID` in the backend Vercel project and authorize the frontend origin in Google Cloud. Use secure SameSite=None cookies for the separate Vercel frontend/API hosts; CSRF tokens are returned by the backend rather than read from another origin's cookies.
