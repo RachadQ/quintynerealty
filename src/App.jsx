@@ -82,8 +82,8 @@ function Login({ onSignedIn, error, onDevLogin }) {
           setBusy(true)
           setMessage('')
           try {
-            await api('/auth/google', { method: 'POST', body: JSON.stringify({ credential }) })
-            await onSignedIn()
+            const signedIn = await api('/auth/google', { method: 'POST', body: JSON.stringify({ credential }) })
+            await onSignedIn(signedIn)
           } catch (error) {
             setMessage(error.message)
           } finally {
@@ -553,11 +553,13 @@ export default function App() {
   const status = new URLSearchParams(location.search).get('status')
 
   const can = useCallback((permission) => session?.permissions?.includes('*') || session?.permissions?.includes(permission), [session])
-  const load = useCallback(async (silent = false) => {
+  const load = useCallback(async (silent = false, afterGoogleLogin = false) => {
     if (silent !== true) { setLoading(true); setNotice(null) }
     try {
       const bootstrap = validateSession(await api('/auth/bootstrap'))
       setSession(bootstrap)
+      if (afterGoogleLogin) setView('receipts')
+      setLoading(false)
       // Fast initial load: only fetch essential active workspace data
       const primaryRequests = [
         canFrom(bootstrap, 'RECEIPTS_READ') ? api('/receipts') : [],
@@ -576,13 +578,21 @@ export default function App() {
         }
       }
       if (dataUnavailable) {
-        setNotice({ type: 'error', text: 'Connected in local mode, but some data is unavailable. Start MongoDB to enable saved records.' })
+        setNotice({ type: 'error', text: 'Signed in, but some data could not be loaded. Retry the connection.' })
       }
     } catch (error) {
-      if (error.status !== 401) setNotice({ type: 'error', text: error.message })
+      if (afterGoogleLogin && error.status === 401) {
+        setNotice({ type: 'error', text: 'Google sign-in succeeded, but your browser did not restore the app session. Allow cookies for this site and confirm the backend uses secure SameSite=None cookies.' })
+      } else if (error.status !== 401) setNotice({ type: 'error', text: error.message })
       setSession(null)
     } finally { if (silent !== true) setLoading(false) }
   }, [])
+
+  const finishGoogleSignIn = useCallback(async result => {
+    if (!result?.user) { await load(); return }
+    validateSession(result)
+    await load(false, true)
+  }, [load])
 
   // Lazy load tab data on demand to eliminate initial query queuing
   useEffect(() => {
@@ -651,7 +661,7 @@ export default function App() {
   const logout = async () => { try { await api('/auth/logout', { method: 'POST' }) } finally { setReceiptJobs([]); setSession(null) } }
 
   if (loading) return <div className="loading"><div className="spinner"/><span>Loading Quintyne Realty inc…</span></div>
-  if (!session?.user) return <Login onSignedIn={load} onDevLogin={load} error={notice?.type === 'error' ? notice.text : null} />
+  if (!session?.user) return <Login onSignedIn={finishGoogleSignIn} onDevLogin={load} error={notice?.type === 'error' ? notice.text : null} />
 
   const changeView = (next) => { setView(next); setMobileMenu(false); window.scrollTo({ top: 0, behavior: 'smooth' }) }
   const activeJobCount = receiptJobs.filter(job => ['queued', 'processing'].includes(job.status)).length
