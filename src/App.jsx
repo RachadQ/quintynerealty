@@ -1,13 +1,13 @@
-import QuotePdfButton from './QuotePdfButton'
+import ReceiptsView from './ReceiptsView.jsx'
+import { BUSINESS_ACTIVITIES } from './businessActivities.js'
 import { useCallback, useId, useEffect, useMemo, useRef, useState } from 'react'
 import { API_URL, api, signInUrl } from './api.js'
-import QuoteForm from './QuoteForm.jsx'
-import JobBudget from './JobBudget.jsx'
 import GasVehicles from './GasVehicles.jsx'
 import companyLogo from './assets/quintyne-realty-logo.svg'
 
 const NAV = [
-  ['jobs', 'Jobs', 'J'],
+  ['receipts', 'Receipts', 'R'],
+  ['gas', 'Gas & vehicles', 'G'],
   ['overview', 'Overview', '⌂'],
   ['reports', 'Financial reports', '↗'],
   ['users', 'Users', '♙'],
@@ -15,13 +15,11 @@ const NAV = [
   ['audit', 'Audit log', '≡'],
 ]
 
-const JOB_SECTIONS = [['quotes', 'Quotes'], ['receipts', 'Receipts'], ['gas', 'Gas & vehicles'], ['drawings', 'Drawings'], ['budget', 'Budget']]
 
 const ALL_PERMISSIONS = [
   'CONFIG_USERS_READ', 'CONFIG_USERS_CREATE', 'CONFIG_USERS_UPDATE', 'CONFIG_USERS_DELETE',
   'CONFIG_ROLES_READ', 'CONFIG_ROLES_CREATE', 'CONFIG_ROLES_UPDATE', 'AUDIT_LOG_READ',
   'RECEIPTS_READ', 'RECEIPTS_CREATE', 'RECEIPTS_UPDATE', 'RECEIPTS_DELETE',
-  'JOBS_READ', 'JOBS_CREATE', 'JOBS_UPDATE',
 ]
 
 const initials = (name = '') => name.split(/\s+/).map((part) => part[0]).join('').slice(0, 2).toUpperCase() || 'U'
@@ -81,7 +79,7 @@ function RoleForm({ role, onSave, onClose }) {
 
 const CATEGORIES = [
   ['gas', 'Gas'], ['client_meals', 'Restaurant / client expenses'], ['maintenance', 'Maintenance'],
-  ['job_expense', 'Job-related expenses'], ['other', 'Other'],
+  ['job_expense', 'Business expenses'], ['other', 'Other'],
 ]
 
 export function DropZone({
@@ -211,19 +209,19 @@ export function DropZone({
   )
 }
 
-function UploadForm({ type, onSave, onClose, onJobQueued, backgroundJob, job, vehicles = [], forceGas = false }) {
+function UploadForm({ type, onSave, onClose, onJobQueued, backgroundJob, vehicles = [], forceGas = false }) {
   const restored = backgroundJob?.preview || {}
   const [form, setForm] = useState({
     document_type: type,
     transaction_type: restored.suggested_transaction_type || 'expense',
     category: forceGas ? 'gas' : (restored.suggested_category || ('other')),
     incurred_at: restored.suggested_date || new Date().toISOString().slice(0, 10),
-    amount: restored.suggested_amount || '',
+    amount: restored.suggested_amount ?? '',
+    hst_amount: restored.suggested_hst_amount ?? '',
+    hst_reviewed: true,
     vendor: restored.suggested_vendor || '',
     currency: (restored.suggested_currency && restored.suggested_currency !== 'CHF') ? restored.suggested_currency : 'CAD',
-    link_type: job ? 'job' : '',
-    link_id: job?.code || '',
-    link_label: job?.name || '',
+    business_activity: 'other',
     vehicle_id: vehicles.find(vehicle => vehicle.is_default)?.id || '',
     fuel_litres: restored.suggested_fuel_litres || restored.suggested_litres || '',
     ocr_text_override: restored.ocr_text || '',
@@ -318,6 +316,7 @@ function UploadForm({ type, onSave, onClose, onJobQueued, backgroundJob, job, ve
       setDetectedFields({
         vendor: result.suggested_vendor,
         amount: result.suggested_amount,
+        hst_amount: result.suggested_hst_amount,
         fuel_litres: extractedLitres,
         category: result.suggested_category,
       })
@@ -327,6 +326,7 @@ function UploadForm({ type, onSave, onClose, onJobQueued, backgroundJob, job, ve
         ocr_text_override: result.ocr_text || '',
         vendor: current.vendor || result.suggested_vendor || '',
         amount: current.amount || result.suggested_amount || '',
+        hst_amount: current.hst_amount !== '' ? current.hst_amount : (result.suggested_hst_amount ?? ''),
         incurred_at: result.suggested_date || current.incurred_at,
         category: isGas ? 'gas' : (result.suggested_category || current.category),
         currency: (result.suggested_currency && result.suggested_currency !== 'CHF') ? result.suggested_currency : (current.currency || 'CAD'),
@@ -407,6 +407,8 @@ function UploadForm({ type, onSave, onClose, onJobQueued, backgroundJob, job, ve
       </details>
     )}
 
+    <label>Business / industry type<select name="business_activity" value={form.business_activity} onChange={e => setForm({ ...form, business_activity: e.target.value })}>{BUSINESS_ACTIVITIES.map(([id, label]) => <option key={id} value={id}>{label}</option>)}</select></label>
+
     <div className="form-row">
       <label>Date<input name="incurred_at" required type="date" value={form.incurred_at} onChange={e => setForm({ ...form, incurred_at: e.target.value })}/></label>
       <label>Category<select name="category" value={form.category} onChange={e => setForm({ ...form, category: e.target.value })}>{CATEGORIES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
@@ -432,6 +434,7 @@ function UploadForm({ type, onSave, onClose, onJobQueued, backgroundJob, job, ve
             <input name="amount" min="0" step="0.01" type="number" placeholder="0.00" value={form.amount} onChange={e => setForm({ ...form, amount: e.target.value })}/>
           </label>
         </div>
+        <label>HST amount (included in total) {detectedFields.hst_amount != null && <small>Detected from receipt?please review</small>}<input name="hst_amount" type="number" min="0" max={form.amount === '' ? undefined : form.amount} step="0.01" value={form.hst_amount} onChange={e => setForm({ ...form, hst_amount: e.target.value })} placeholder="Not recorded"/><small>Enter the HST shown on the receipt, or 0 if none was charged. Leave blank if unknown.</small></label>
         <label>
           Vendor {detectedFields.vendor && <span style={{ color: '#21a977', fontWeight: 'normal', fontSize: '10px' }}>(✨ Auto-detected)</span>}
           <input name="vendor" value={form.vendor} placeholder="e.g. Petro-Canada" onChange={e => setForm({ ...form, vendor: e.target.value })}/>
@@ -441,14 +444,7 @@ function UploadForm({ type, onSave, onClose, onJobQueued, backgroundJob, job, ve
 
 
 
-    <fieldset>
-      <legend>Link to work (optional)</legend>
-      <div className="form-row">
-        <label>Record type<select name="link_type" value={form.link_type} onChange={e => setForm({ ...form, link_type: e.target.value })}><option value="">Not linked</option><option value="job">Job</option><option value="quote">Quote</option><option value="estimate">Estimate</option></select></label>
-        <label>Job / quote / estimate ID<input name="link_id" value={form.link_id} onChange={e => setForm({ ...form, link_id: e.target.value })} placeholder="e.g. JOB-1042"/></label>
-      </div>
-      <label>Description<input name="link_label" value={form.link_label} onChange={e => setForm({ ...form, link_label: e.target.value })} placeholder="Optional reference name"/></label>
-    </fieldset>
+
 
     <footer>
       <button type="button" className="button secondary" onClick={onClose}>Cancel</button>
@@ -463,10 +459,8 @@ function UploadForm({ type, onSave, onClose, onJobQueued, backgroundJob, job, ve
 export default function App() {
   const [session, setSession] = useState(null)
   const [loading, setLoading] = useState(true)
-  const [view, setView] = useState('jobs')
-  const [jobSection, setJobSection] = useState('quotes')
+  const [view, setView] = useState('receipts')
   const [users, setUsers] = useState([])
-  const [jobs, setJobs] = useState([])
   const [vehicles, setVehicles] = useState([])
   const [roles, setRoles] = useState([])
   const [logs, setLogs] = useState([])
@@ -474,7 +468,7 @@ export default function App() {
   const [receiptJobs, setReceiptJobs] = useState([])
   const [summary, setSummary] = useState(null)
   const [reportYear, setReportYear] = useState('all')
-  const [reportJobId, setReportJobId] = useState('')
+  const [reportActivity, setReportActivity] = useState('')
   const [modal, setModal] = useState(null)
   const [notice, setNotice] = useState(null)
   const [query, setQuery] = useState('')
@@ -489,13 +483,12 @@ export default function App() {
       setSession(bootstrap)
       // Fast initial load: only fetch essential active workspace data
       const primaryRequests = [
-        canFrom(bootstrap, 'JOBS_READ') ? api('/jobs') : [],
         canFrom(bootstrap, 'RECEIPTS_READ') ? api('/receipts') : [],
         canFrom(bootstrap, 'RECEIPTS_READ') ? api('/vehicles') : [],
       ]
       const results = await Promise.allSettled(primaryRequests)
       const value = (index, fallback) => results[index].status === 'fulfilled' ? results[index].value : fallback
-      setJobs(value(0, [])); setReceipts(value(1, [])); setVehicles(value(2, []))
+      setReceipts(value(0, [])); setVehicles(value(1, []))
       let dataUnavailable = results.some(result => result.status === 'rejected')
       if (canFrom(bootstrap, 'RECEIPTS_CREATE')) {
         try {
@@ -517,10 +510,12 @@ export default function App() {
   // Lazy load tab data on demand to eliminate initial query queuing
   useEffect(() => {
     if (!session) return
+    let cancelled = false
     if (view === 'reports' && canFrom(session, 'RECEIPTS_READ')) {
-      api(`/receipts/reports/summary?year=${reportYear}${reportJobId ? `&job_id=${encodeURIComponent(reportJobId)}` : ''}`)
-        .then(setSummary)
-        .catch(() => {})
+      setSummary(null)
+      api(`/receipts/reports/summary?year=${reportYear}${reportActivity ? `&business_activity=${encodeURIComponent(reportActivity)}` : ''}`)
+        .then(result => { if (!cancelled) setSummary(result) })
+        .catch(error => { if (!cancelled) setNotice({ type: 'error', text: error.message }) })
     }
     if ((view === 'users' || view === 'overview') && canFrom(session, 'CONFIG_USERS_READ') && !users.length) {
       api('/configuration/users').then(setUsers).catch(() => {})
@@ -531,7 +526,8 @@ export default function App() {
     if ((view === 'audit' || view === 'overview') && canFrom(session, 'AUDIT_LOG_READ') && !logs.length) {
       api('/audit-logs?limit=100').then(setLogs).catch(() => {})
     }
-  }, [view, session, reportYear, reportJobId, users.length, roles.length, logs.length])
+    return () => { cancelled = true }
+  }, [view, session, reportYear, reportActivity, users.length, roles.length, logs.length])
 
   useEffect(() => { load() }, [load])
   useEffect(() => { if (!session) return; const timer = setInterval(() => api('/auth/heartbeat', { method: 'POST' }).catch(() => setSession(null)), 10 * 60 * 1000); return () => clearInterval(timer) }, [session])
@@ -585,7 +581,7 @@ export default function App() {
   return <div className="shell">
     <aside>
       <div className="brand"><img className="brand-logo small" src={companyLogo} alt="Quintyne Realty inc"/><div><strong>Quintyne Realty inc</strong><span>Administration</span></div></div>
-      <nav>{NAV.map(([id, label, icon]) => <div className="nav-group" key={id}><button className={view === id ? 'active' : ''} onClick={() => changeView(id)}><span>{icon}</span>{label}</button>{id === 'jobs' && view === 'jobs' && <div className="job-subnav" role="navigation" aria-label="Job sections">{JOB_SECTIONS.map(([section, name]) => <button key={section} className={`${jobSection === section || (section === 'receipts' && jobSection === 'gas') ? 'active' : ''} ${section === 'gas' ? 'nested' : ''}`} onClick={() => setJobSection(section)}>{name}</button>)}</div>}</div>)}</nav>
+      <nav>{NAV.map(([id, label, icon]) => <div className="nav-group" key={id}><button className={view === id ? 'active' : ''} onClick={() => changeView(id)}><span>{icon}</span>{label}</button></div>)}</nav>
       <div className="account"><div className="avatar">{initials(session.user.full_name)}</div><div><strong>{session.user.full_name}</strong><span>{session.user.email}</span></div><button onClick={logout} title="Sign out">↪</button></div>
     </aside>
     <header className="mobile-header"><img className="brand-logo small" src={companyLogo} alt="Quintyne Realty inc"/><div><strong>Quintyne Realty inc</strong><span>{NAV.find(n => n[0] === view)?.[1]}</span></div><button onClick={logout} aria-label="Sign out">↪</button></header>
@@ -595,164 +591,25 @@ export default function App() {
       {view === 'overview' && <Overview users={users} roles={roles} logs={logs} user={session.user} setView={setView} />}
       {view === 'users' && <section><div className="section-head"><div><h2>People with access</h2><p>Manage accounts, roles, and activation status.</p></div>{can('CONFIG_USERS_CREATE') && <button className="button" onClick={() => setModal({ type: 'user' })}>+ Add user</button>}</div><div className="toolbar"><input name="user_search" type="search" value={query} onChange={e => setQuery(e.target.value)} placeholder="Search users…"/><span>{filteredUsers.length} users</span></div><div className="table-wrap"><table><thead><tr><th>User</th><th>Roles</th><th>Status</th><th>Last activity</th><th/></tr></thead><tbody>{filteredUsers.map(u => <tr key={u.id}><td><div className="person"><div className="avatar soft">{initials(u.full_name)}</div><div><strong>{u.full_name}</strong><span>{u.email}</span></div></div></td><td>{u.is_super_admin ? <span className="tag purple">Super admin</span> : u.role_ids?.length ? <span className="tag">{u.role_ids.length} role{u.role_ids.length > 1 ? 's' : ''}</span> : <span className="dim">No role</span>}</td><td><span className={`status ${u.is_active ? 'on' : 'off'}`}>{u.is_active ? 'Active' : 'Inactive'}</span></td><td>{fmtDate(u.last_activity_at)}</td><td className="actions">{can('CONFIG_USERS_UPDATE') && <button onClick={() => setModal({ type: 'user', user: u })}>Edit</button>}{can('CONFIG_USERS_DELETE') && u.id !== session.user.id && <button className="danger-link" onClick={() => removeUser(u)}>Delete</button>}</td></tr>)}</tbody></table>{!filteredUsers.length && <Empty text="No users match your search."/>}</div></section>}
       {view === 'roles' && <section><div className="section-head"><div><h2>Roles & permissions</h2><p>Group permissions into reusable access profiles.</p></div>{can('CONFIG_ROLES_CREATE') && <button className="button" onClick={() => setModal({ type: 'role' })}>+ New role</button>}</div><div className="card-grid">{roles.map(r => <article className="role-card" key={r.id}><div className="role-icon">◇</div><div className="role-title"><h3>{r.name}</h3><span className={`status ${r.is_active ? 'on' : 'off'}`}>{r.is_active ? 'Active' : 'Inactive'}</span></div><code>{r.code}</code><p>{r.permissions?.length || 0} permissions assigned</p><div className="chips">{r.permissions?.slice(0, 3).map(p => <span key={p}>{p.replaceAll('_', ' ').toLowerCase()}</span>)}{r.permissions?.length > 3 && <span>+{r.permissions.length - 3} more</span>}</div>{can('CONFIG_ROLES_UPDATE') && <button className="text-button" onClick={() => setModal({ type: 'role', role: r })}>Edit role →</button>}</article>)}{!roles.length && <Empty text="No roles have been created."/>}</div></section>}
-      {view === 'jobs' && <JobsView vehicles={vehicles} allReceipts={receipts} jobs={jobs} receiptJobs={receiptJobs} can={can} jobSection={jobSection} setJobSection={setJobSection} onRefresh={() => load(true)} onReceiptFiles={startBackgroundReceipts} onOpenPreview={(job, backgroundJob) => setModal({type:'upload', documentType:backgroundJob.documentType, backgroundJob, job})} onUploadDocument={(job, documentType) => setModal({type:'upload', documentType, job})} onViewReport={(job, receipt) => { setReportJobId(job.id); setReportYear(new Date(receipt.incurred_at).getUTCFullYear()); setView('reports') }}/>}
-      {view === 'reports' && <Reports summary={summary} year={reportYear} setYear={setReportYear} jobs={jobs} receipts={receipts} jobId={reportJobId} setJobId={setReportJobId}/>} 
+      {view === 'receipts' && (can('RECEIPTS_READ') ? <ReceiptsView items={receipts} previews={receiptJobs} can={can} isAdmin={session.user.is_super_admin} DropZone={DropZone} Modal={Modal} onUpload={() => setModal({type:'upload', documentType:'receipt'})} onFiles={startBackgroundReceipts} onReview={backgroundJob => setModal({type:'upload', documentType:'receipt', backgroundJob})} onDelete={removeReceipt} onRefresh={() => load(true)}/> : <Empty text="You do not have permission to view receipts."/>)}
+      {view === 'gas' && can('RECEIPTS_READ') && <GasVehicles vehicles={vehicles} receipts={receipts.filter(item => item.category === 'gas' && item.vehicle_id)} canCreate={can('RECEIPTS_CREATE')} canDelete={can('RECEIPTS_DELETE')} onRefresh={async () => setVehicles(await api('/vehicles'))} onAddReceipt={() => setModal({type:'upload', documentType:'gas-receipt'})}/>}
+      {view === 'reports' && can('RECEIPTS_READ') && <Reports summary={summary} year={reportYear} setYear={setReportYear} receipts={receipts} activity={reportActivity} setActivity={setReportActivity}/>}
       {view === 'audit' && <section><div className="section-head"><div><h2>Audit log</h2><p>A chronological record of administrative activity.</p></div><button className="button secondary" onClick={() => api('/audit-logs?limit=100').then(setLogs)}>Refresh</button></div><div className="table-wrap"><table><thead><tr><th>Event</th><th>Resource</th><th>Actor</th><th>Date & time</th></tr></thead><tbody>{logs.map(log => <tr key={log.id}><td><strong>{log.action?.replaceAll('_', ' ') || 'EVENT'}</strong></td><td>{log.resource_type || '—'} <span className="dim">{log.resource_id?.slice?.(0, 8)}</span></td><td className="mono">{log.actor_id?.slice?.(0, 8) || 'System'}</td><td>{fmtDate(log.created_at)}</td></tr>)}</tbody></table>{!logs.length && <Empty text="No audit activity to show."/>}</div></section>}
     </main>
-    {mobileMenu && <div className="mobile-more" onClick={() => setMobileMenu(false)}><div onClick={e => e.stopPropagation()}><header><strong>Administration</strong><button onClick={() => setMobileMenu(false)}>×</button></header>{NAV.filter(([id]) => ['overview','users','roles','audit'].includes(id)).map(([id,label,icon]) => <button key={id} onClick={() => changeView(id)}><span>{icon}</span>{label}<b>›</b></button>)}</div></div>}
+    {mobileMenu && <div className="mobile-more" onClick={() => setMobileMenu(false)}><div onClick={e => e.stopPropagation()}><header><strong>Administration</strong><button onClick={() => setMobileMenu(false)}>×</button></header>{NAV.filter(([id]) => ['users','roles','audit'].includes(id)).map(([id,label,icon]) => <button key={id} onClick={() => changeView(id)}><span>{icon}</span>{label}<b>›</b></button>)}</div></div>}
     <nav className="mobile-nav" aria-label="Primary navigation">
-      {NAV.filter(([id]) => ['jobs','reports'].includes(id)).map(([id,label,icon]) => <button key={id} className={view === id ? 'active' : ''} onClick={() => changeView(id)}><span>{icon}</span><small>{label}</small></button>)}
-      <button className={['overview','users','roles','audit'].includes(view) ? 'active' : ''} onClick={() => setMobileMenu(true)}><span>•••</span><small>More</small></button>
+      {NAV.filter(([id]) => ['receipts','gas','reports','overview'].includes(id)).map(([id,label,icon]) => <button key={id} className={view === id ? 'active' : ''} onClick={() => changeView(id)}><span>{icon}</span><small>{label}</small></button>)}
+      <button className={['users','roles','audit'].includes(view) ? 'active' : ''} onClick={() => setMobileMenu(true)}><span>•••</span><small>More</small></button>
     </nav>
     {modal?.type === 'user' && <Modal title={modal.user ? 'Edit user' : 'Add a user'} onClose={() => setModal(null)}><UserForm roles={roles} user={modal.user} onSave={saveUser} onClose={() => setModal(null)}/></Modal>}
     {modal?.type === 'role' && <Modal title={modal.role ? 'Edit role' : 'Create a role'} onClose={() => setModal(null)}><RoleForm role={modal.role} onSave={saveRole} onClose={() => setModal(null)}/></Modal>}
-    {modal?.type === 'upload' && <Modal title={'Upload receipt'} onClose={() => setModal(null)}><UploadForm type={modal.documentType === 'gas-receipt' ? 'receipt' : modal.documentType} forceGas={modal.documentType === 'gas-receipt'} vehicles={vehicles} backgroundJob={modal.backgroundJob} job={modal.job} onJobQueued={queueReceiptJob} onSave={uploadDocument} onClose={() => setModal(null)}/></Modal>}
+    {modal?.type === 'upload' && <Modal title={'Upload receipt'} onClose={() => setModal(null)}><UploadForm type={modal.documentType === 'gas-receipt' ? 'receipt' : modal.documentType} forceGas={modal.documentType === 'gas-receipt'} vehicles={vehicles} backgroundJob={modal.backgroundJob} onJobQueued={queueReceiptJob} onSave={uploadDocument} onClose={() => setModal(null)}/></Modal>}
   </div>
 }
 
 
-function JobsView({ vehicles, allReceipts, jobs, receiptJobs, can, jobSection, setJobSection, onRefresh, onReceiptFiles, onOpenPreview, onUploadDocument, onViewReport }) {
-  const [selectedId, setSelectedId] = useState(null)
-  const [jobSearch, setJobSearch] = useState('')
-  const [companyDraft, setCompanyDraft] = useState('')
-  const [companySaving, setCompanySaving] = useState(false)
-  const [searchOpen, setSearchOpen] = useState(false)
-  const [activeSuggestion, setActiveSuggestion] = useState(0)
-  const jobDetailsRef = useRef(null)
-  const createPanel = useRef(null)
-  const [detail, setDetail] = useState(null)
-  const [selectedDocument, setSelectedDocument] = useState(null)
-  const [quoteEditor, setQuoteEditor] = useState(null)
-  const [documentPreviewUrl, setDocumentPreviewUrl] = useState('')
-  const [documentPreviewError, setDocumentPreviewError] = useState(false)
-  const [form, setForm] = useState({ code: '', name: '', company: '', description: '' })
-  const [busy, setBusy] = useState(false)
-  const selected = jobs.find(job => job.id === selectedId)
-  useEffect(() => { setCompanyDraft(selected?.company || '') }, [selectedId, selected?.company])
-  const saveCompany = async (event) => {
-    event.preventDefault(); if (!selectedId) return
-    setCompanySaving(true)
-    try { await api(`/jobs/${selectedId}`, { method: 'PATCH', body: JSON.stringify({ company: companyDraft }) }); await onRefresh() }
-    catch (error) { alert(error.message) } finally { setCompanySaving(false) }
-  }
-  const normalizeJobSearch = value => value.normalize('NFKC').toLocaleLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim()
-  const searchTerm = normalizeJobSearch(jobSearch)
-  const saveBudget = async changes => {
-    await api(`/jobs/${selectedId}`, { method: 'PATCH', body: JSON.stringify(changes) })
-    await Promise.all([onRefresh(), refreshDetail()])
-  }
-  const matchingJobs = jobs.filter(job => normalizeJobSearch(`${job.code} ${job.name} ${job.company || ''}`).includes(searchTerm))
-  const suggestions = matchingJobs.slice(0, 10)
-  const shouldSuggestCreate = Boolean(jobSearch.trim() && matchingJobs.length === 0 && can('JOBS_CREATE'))
-  const selectJob = (job) => {
-    setSelectedId(job.id); setSelectedDocument(null); setJobSearch(`${job.code} - ${job.name}`); setSearchOpen(false)
-    requestAnimationFrame(() => jobDetailsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }))
-  }
-  const openCreateForCompany = () => {
-    if (!can('JOBS_CREATE')) return
-    const company = matchingJobs.length ? '' : jobSearch.trim()
-    setForm(current => ({ ...current, company }))
-    setSearchOpen(false)
-    if (createPanel.current) createPanel.current.open = true
-    requestAnimationFrame(() => {
-      createPanel.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-      createPanel.current?.querySelector('input')?.focus({ preventScroll: true })
-    })
-  }
-  const onSearchKeyDown = event => {
-    if (event.key === 'Escape') { setSearchOpen(false); return }
-    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
-      event.preventDefault(); setSearchOpen(true)
-      setActiveSuggestion(index => (index + (event.key === 'ArrowDown' ? 1 : -1) + suggestions.length) % (suggestions.length || 1))
-    }
-    if (event.key === 'Enter' && searchOpen) {
-      if (suggestions.length) { event.preventDefault(); selectJob(suggestions[activeSuggestion] || suggestions[0]) }
-      else if (shouldSuggestCreate) { event.preventDefault(); openCreateForCompany() }
-    }
-  }
-  useEffect(() => { if (jobs.length === 1 && !selectedId) setSelectedId(jobs[0].id) }, [jobs, selectedId])
-  const refreshDetail = async (id = selectedId) => {
-    if (!id) return
-    try { setDetail(await api(`/jobs/${id}`)) } catch { setDetail(null) }
-  }
-  useEffect(() => { if (selectedId) refreshDetail(selectedId) }, [selectedId, jobs])
-  useEffect(() => {
-    setDocumentPreviewUrl('')
-    setDocumentPreviewError(false)
-    if (!selectedDocument) return undefined
-    if (selectedDocument.web_url) {
-      setDocumentPreviewUrl(selectedDocument.web_url)
-      return undefined
-    }
-    let active = true
-    let objectUrl = ''
-    fetch(`${API_URL}/receipts/${selectedDocument.id}/file`, { credentials: 'include' })
-      .then(async response => {
-        if (!response.ok) throw new Error('Preview unavailable')
-        const contentType = response.headers.get('content-type') || ''
-        if (contentType.includes('application/json')) {
-          const json = await response.json()
-          if (json.web_url && active) {
-            setDocumentPreviewUrl(json.web_url)
-            return null
-          }
-          throw new Error('Preview unavailable')
-        }
-        return response.blob()
-      })
-      .then(blob => {
-        if (!blob) return
-        objectUrl = URL.createObjectURL(blob)
-        if (active) setDocumentPreviewUrl(objectUrl)
-        else URL.revokeObjectURL(objectUrl)
-      })
-      .catch(() => {
-        if (active) setDocumentPreviewError(true)
-      })
-    return () => {
-      active = false
-      if (objectUrl) URL.revokeObjectURL(objectUrl)
-    }
-  }, [selectedDocument])
-  const create = async (event) => {
-    event.preventDefault(); setBusy(true)
-    try {
-      const job = await api('/jobs', { method: 'POST', body: JSON.stringify(form) })
-      setForm({ code: '', name: '', company: '', description: '' }); selectJob(job); if (createPanel.current) createPanel.current.open = false; await onRefresh()
-    } catch (error) { alert(error.message) } finally { setBusy(false) }
-  }
-  const saveQuote = async payload => {
-    await api(`/jobs/${selectedId}/quotes${quoteEditor?.id ? `/${quoteEditor.id}` : ''}`, {
-      method: quoteEditor?.id ? 'PATCH' : 'POST', body: JSON.stringify(payload),
-    })
-    setQuoteEditor(null)
-    await refreshDetail()
-  }
-  const removeQuote = async quote => {
-    if (!confirm(`Remove quote ${quote.title}?`)) return
-    try { await api(`/jobs/${selectedId}/quotes/${quote.id}`, { method: 'DELETE' }); await refreshDetail() }
-    catch (error) { alert(error.message) }
-  }
-  const upload = async (kind, file) => {
-    if (!file || !selectedId) return
-    const body = new FormData(); body.append('kind', kind); body.append('file', file)
-    try { await api(`/jobs/${selectedId}/files`, { method: 'POST', body }); await refreshDetail() }
-    catch (error) { alert(error.message) }
-  }
-  const remove = async (file) => {
-    if (!confirm(`Remove ${file.filename} from this job?`)) return
-    try { await api(`/jobs/${selectedId}/files/${file.id}`, { method: 'DELETE' }); await refreshDetail() }
-    catch (error) { alert(error.message) }
-  }
-  const section = (title, key, kind) => {
-    return <section className="panel job-section"><div className="section-head"><div><h2>{title}</h2><p>{detail?.[key]?.length || 0} attached</p></div>{key === 'quotes' && can('JOBS_UPDATE') && <button type="button" className="button" onClick={() => setQuoteEditor({})}>+ New quote</button>}{!kind && can('RECEIPTS_CREATE') && <button className="button" onClick={() => onUploadDocument(selected, 'receipt')}>+ Add receipt</button>}</div>{kind && can('JOBS_UPDATE') && <DropZone compact multiple={false} icon="📐" title={`Drop ${kind} file here or browse`} subtitle={`Attach ${kind} image or PDF to ${selected.code}`} onFilesSelected={files => upload(kind, files[0])}/>}{key === 'receipts' && can('RECEIPTS_CREATE') && <DropZone compact multiple icon="🧾" title="Drop receipts here to attach to this job" subtitle="Uploads and extracts details with OCR automatically" onFilesSelected={onReceiptFiles}/>}{key === 'receipts' && receiptJobs.length > 0 && <details className="job-previews-details ocr-details-toggle" open style={{ marginTop: '16px', marginBottom: '16px' }}><summary className="ocr-toggle-summary" style={{ padding: '10px 14px', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '8px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><span style={{ fontWeight: 600, color: '#166534', display: 'flex', alignItems: 'center', gap: '8px' }}><span>🧾</span> Receipt previews ({receiptJobs.length})</span><small className="ocr-toggle-badge" style={{ background: '#dcfce7', color: '#15803d' }}>{receiptJobs.some(j => ['queued', 'processing'].includes(j.status)) ? 'Reading receipts…' : 'Tap to collapse / expand'}</small></summary><div style={{ marginTop: '12px', paddingLeft: '4px', paddingRight: '4px' }}><p style={{ margin: '0 0 12px 0', fontSize: '13px', color: '#555e70' }}>Review and confirm previews before they are finalized into this job.</p>{receiptJobs.map(preview => <div className={`background-job ${preview.status}`} key={preview.job_id} style={{ marginBottom: '8px' }}><div className={['queued','processing'].includes(preview.status) ? 'spinner small' : 'job-ready'}>{preview.status === 'completed' ? '✓' : preview.status === 'failed' ? '!' : ''}</div><div><strong>{preview.filename}</strong><span>{preview.status === 'completed' ? 'OCR preview ready · Tap Review to finalize' : preview.status === 'failed' ? (preview.error || 'OCR failed—manual review available') : 'Processing receipt in the background…'}</span></div><button className="button secondary" onClick={() => onOpenPreview(selected, preview)} disabled={!['completed','failed'].includes(preview.status)}>Review</button></div>)}</div></details>}<div className="document-grid">{(detail?.[key] || []).map(item => item.record_type === 'structured_quote' ? <article className="document-card quote-card" key={item.id}><div className="doc-main"><h3>{item.title}</h3><p>{item.items?.length || 0} items · {money(item.total, item.currency || 'CAD')}</p><ul>{item.items?.slice(0, 3).map((line, index) => <li key={index}>{line.quantity} × {line.name}</li>)}</ul></div><div className="quote-card-actions">{can('JOBS_READ') && <QuotePdfButton jobId={selectedId} quote={item}/>}{can('JOBS_UPDATE') && <><button type="button" className="open-file" onClick={() => setQuoteEditor(item)}>Edit quote</button><button type="button" className="delete-file" onClick={() => removeQuote(item)} aria-label={`Remove ${item.title}`}>×</button></>}</div></article> : <article className="document-card" key={item.id}><button type="button" className="doc-main receipt-details-trigger" onClick={() => !kind && setSelectedDocument(item)} aria-label={`View details for ${item.vendor || item.filename || 'Receipt'}`} disabled={Boolean(kind)}><h3>{item.vendor || item.filename}</h3><p>{item.filename || 'Created in app'}</p><div className="doc-meta">{item.document_type === 'receipt' ? <><span>Receipt date: {fmtDate(item.incurred_at)}</span><span>Uploaded: {fmtDate(item.created_at)}</span></> : <span>{fmtDate(item.created_at || item.incurred_at)}</span>}{item.amount != null && item.document_type === 'receipt' && <span>{money(item.amount, item.currency)}</span>}</div>{!kind && <span className="receipt-view-hint">View details</span>}</button>{kind ? <a className="open-file" href={item.web_url || `${API_URL}/jobs/${selectedId}/files/${item.id}`} target="_blank" rel="noreferrer">Open</a> : (item.web_url || item.mime_type) && <a className="open-file" href={item.web_url || `${API_URL}/receipts/${item.id}/file`} target="_blank" rel="noreferrer">Open</a>}{item.document_type === 'receipt' && item.amount != null && <button type="button" className="open-file" onClick={() => onViewReport(selected, item)}>View in report</button>}{kind && can('JOBS_UPDATE') && <button className="delete-file" onClick={() => remove(item)} aria-label={`Remove ${item.filename}`}>x</button>}</article>)}{!detail?.[key]?.length && <Empty text={`No ${title.toLowerCase()} attached yet.`}/>}</div></section>
-  }
-  return <section><div className="section-head"><div><h2>Jobs</h2><p>Keep receipts, quotes, and drawings together.</p></div></div><div className="job-selector panel"><label htmlFor="job-search">Search jobs</label><div className="job-search-wrap" onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) setSearchOpen(false) }}><input id="job-search" type="search" role="combobox" aria-autocomplete="list" aria-expanded={searchOpen} aria-controls="job-suggestions" aria-activedescendant={searchOpen && suggestions.length ? `job-option-${suggestions[activeSuggestion]?.id}` : undefined} autoComplete="off" value={jobSearch} onFocus={() => setSearchOpen(true)} onChange={event => { setJobSearch(event.target.value); setActiveSuggestion(0); setSearchOpen(true) }} onKeyDown={onSearchKeyDown} placeholder="Search by job or code, or create a job"/>{searchOpen && <div id="job-suggestions" className="job-suggestions" role="listbox">{suggestions.map((job, index) => <button type="button" role="option" aria-selected={index === activeSuggestion} id={`job-option-${job.id}`} key={job.id} className={index === activeSuggestion ? 'active' : ''} onMouseEnter={() => setActiveSuggestion(index)} onClick={() => selectJob(job)}><strong>{job.code} · {job.name}</strong><span>{job.company || 'Company not set'}</span></button>)}{!suggestions.length && <p>No jobs match your search.</p>}{shouldSuggestCreate && <button type="button" className="job-create-suggestion" onClick={openCreateForCompany}><strong>+ Create job for {jobSearch.trim()}</strong><span>Company will be filled in for you</span></button>}{matchingJobs.length > suggestions.length && <small>Keep typing to narrow {matchingJobs.length} matches.</small>}</div>}</div><div className="job-search-footer"><small>{selected ? `Selected: ${selected.code} · ${selected.name}` : `${jobs.length} jobs available`}</small>{can('JOBS_CREATE') && <button type="button" className="button secondary" onClick={openCreateForCompany}>+ Create job</button>}</div></div>{can('JOBS_CREATE') && <details className="job-create panel" ref={createPanel}><summary>+ Create job</summary><form className="form" onSubmit={create}><div className="form-row"><label>Job code<input name="code" required maxLength="80" value={form.code} onChange={event => setForm({...form, code: event.target.value})} placeholder="JOB-1042"/></label><label>Job name<input name="name" required maxLength="200" value={form.name} onChange={event => setForm({...form, name: event.target.value})} placeholder="Project name"/></label></div><label>Company<input name="company" maxLength="200" value={form.company} onChange={event => setForm({...form, company: event.target.value})} placeholder="Client or company name"/></label><label>Description<input name="description" maxLength="2000" value={form.description} onChange={event => setForm({...form, description: event.target.value})}/></label><button className="button" disabled={busy}>{busy ? 'Creating...' : '+ Create job'}</button></form></details>}{!jobs.length && <Empty text="No jobs yet. Create one to attach its documents."/>}{selected && <div className="job-details" ref={jobDetailsRef}><h2>{selected.code}: {selected.name}</h2>{can('JOBS_UPDATE') ? <form className="job-company-editor" onSubmit={saveCompany}><label>Company<input name="company" maxLength="200" value={companyDraft} onChange={event => setCompanyDraft(event.target.value)} placeholder="Add company name"/></label><button type="submit" className="button secondary" disabled={companySaving || companyDraft.trim() === (selected.company || '')}>{companySaving ? 'Saving...' : 'Save company'}</button></form> : <p className="job-company-label">{selected.company || 'Company not set'}</p>}<div className="job-tabs" role="tablist" aria-label="Job documents">{JOB_SECTIONS.filter(([key]) => key !== 'gas').map(([key,label]) => <button type="button" role="tab" aria-selected={jobSection === key || (key === 'receipts' && jobSection === 'gas')} className={jobSection === key || (key === 'receipts' && jobSection === 'gas') ? 'active' : ''} key={key} onClick={() => setJobSection(key)}>{label}{key !== 'budget' && <span>{detail?.[key]?.length || 0}</span>}</button>)}</div><div role="tabpanel">{jobSection === 'budget' && <JobBudget job={selected} summary={detail?.budget} canEdit={can('JOBS_UPDATE')} onSave={saveBudget}/>} {jobSection === 'quotes' && section('Quotes', 'quotes', 'quote')}{jobSection === 'receipts' && section('Receipts', 'receipts')}{jobSection === 'gas' && <GasVehicles vehicles={vehicles} receipts={(allReceipts || []).filter(item => item.category === 'gas' && item.vehicle_id)} canCreate={can('RECEIPTS_CREATE')} canDelete={can('RECEIPTS_DELETE')} onRefresh={() => onRefresh()} onAddReceipt={() => onUploadDocument(selected, 'gas-receipt')}/>}{jobSection === 'drawings' && section('Drawings', 'drawings', 'drawing')}</div></div>}{quoteEditor && selected && <QuoteForm job={selected} quote={quoteEditor.id ? quoteEditor : null} receipts={detail?.receipts || []} onSave={saveQuote} onClose={() => setQuoteEditor(null)}/>}
-        {selectedDocument && <Modal title="Receipt details" onClose={() => setSelectedDocument(null)}><div className="receipt-info"><h3>{selectedDocument.vendor || selectedDocument.filename}</h3><details className="ocr-details-toggle" open style={{ marginBottom: '16px' }}><summary className="ocr-toggle-summary" style={{ padding: '12px 16px', background: '#f4f5fa', border: '1px solid var(--line)', borderRadius: '10px', cursor: 'pointer' }}><span>🔍 View image / document preview</span><small className="ocr-toggle-badge">Tap to collapse / expand</small></summary><div className="receipt-info-preview" style={{ margin: '12px 0 0 0' }}>{selectedDocument.web_url ? <div style={{ padding: '12px', background: '#eff6ff', borderRadius: '8px', border: '1px solid #bfdbfe' }}><p style={{ margin: '0 0 8px 0', color: '#1e40af' }}>Original file is stored in Google Drive.</p><a className="button" href={selectedDocument.web_url} target="_blank" rel="noreferrer">Open in Google Drive ↗</a></div> : documentPreviewUrl ? (selectedDocument.mime_type === 'application/pdf' ? <iframe title="Document preview" src={documentPreviewUrl}/> : <img src={documentPreviewUrl} alt={`Preview of ${selectedDocument.filename}`} onError={() => setDocumentPreviewError(true)}/>) : documentPreviewError ? <p>Preview unavailable. Open the original file below.</p> : <p>Loading preview...</p>}</div></details><dl><div><dt>File</dt><dd>{selectedDocument.filename}</dd></div><div><dt>Receipt date</dt><dd>{fmtDate(selectedDocument.incurred_at)}</dd></div><div><dt>Uploaded</dt><dd>{fmtDate(selectedDocument.created_at)}</dd></div>{selectedDocument.document_type === 'receipt' && <><div><dt>Amount</dt><dd>{selectedDocument.amount == null ? 'Not recorded' : money(selectedDocument.amount, selectedDocument.currency)}</dd></div><div><dt>Type</dt><dd>{selectedDocument.transaction_type || 'Expense'}</dd></div></>}<div><dt>Category</dt><dd>{categoryLabel(selectedDocument.category)}</dd></div><div><dt>Job</dt><dd>{selected?.code || selectedDocument.link_id}</dd></div></dl>{selectedDocument.ocr_text && <details className="ocr-details-toggle" open style={{ marginBottom: '16px' }}><summary className="ocr-toggle-summary" style={{ padding: '12px 16px', background: '#f4f5fa', border: '1px solid var(--line)', borderRadius: '10px', cursor: 'pointer' }}><span>📝 Extracted text</span><small className="ocr-toggle-badge">Tap to collapse</small></summary><pre style={{ margin: '12px 0 0 0' }}>{selectedDocument.ocr_text}</pre></details>}<a className="button" href={selectedDocument.web_url || `${API_URL}/receipts/${selectedDocument.id}/file`} target="_blank" rel="noreferrer">Open original file</a></div></Modal>}</section>
-}
-
-function Reports({ summary, year, setYear, jobs, receipts, jobId, setJobId }) {
-  if (!summary) return <Empty text="Financial reports require receipt read access."/>
+function Reports({ summary, year, setYear, receipts, activity, setActivity }) {
+  if (!summary) return <Empty text="Loading financial reports?"/>
   const reportYears = [...new Set([...(year === 'all' ? [] : [year]), new Date().getFullYear(), ...receipts
     .filter(item => item.document_type === 'receipt' && item.amount != null && item.incurred_at)
     .map(item => new Date(item.incurred_at).getUTCFullYear())
@@ -760,7 +617,7 @@ function Reports({ summary, year, setYear, jobs, receipts, jobId, setJobId }) {
   const periods = (year === 'all' ? summary.years : summary.months)?.filter(m => m.income || m.expenses) || []
   const max = Math.max(1, ...periods.flatMap(m => [m.income, m.expenses]))
 
-  return <section><div className="section-head"><div><h2>Profit & loss</h2><p>Weekly, monthly, and yearly totals from uploaded transactions.</p></div><div className="report-filters"><label>Job<select name="report_job_id" value={jobId} onChange={e => setJobId(e.target.value)}><option value="">All jobs</option>{jobs.map(job => <option key={job.id} value={job.id}>{job.code} - {job.name}{job.company ? ` (${job.company})` : ''}</option>)}</select></label><label>Year<select name="report_year" value={year} onChange={e => setYear(e.target.value === 'all' ? 'all' : Number(e.target.value))}><option value="all">All years</option>{reportYears.map(value => <option key={value} value={value}>{value}</option>)}</select></label></div></div><div className="stats finance-stats"><article><span>Total income</span><strong className="income">{money(summary.income, summary.currency)}</strong><small>{year === 'all' ? 'All years' : year} recorded income</small></article><article><span>Total expenses</span><strong>{money(summary.expenses, summary.currency)}</strong><small>{year === 'all' ? 'All years' : year} categorized spend</small></article><article><span>Net profit / loss</span><strong className={summary.profit_loss >= 0 ? 'income' : 'loss'}>{money(summary.profit_loss, summary.currency)}</strong><small>Income minus expenses</small></article></div><div className="report-grid"><article className="panel"><h3>{year === 'all' ? 'Yearly overview' : 'Monthly overview'}</h3><p>Income and expenses by {year === 'all' ? 'year' : 'month'}</p><div className="bars">{periods.length ? periods.map(m => <div className="bar-row" key={year === 'all' ? m.year : m.month}><span>{year === 'all' ? m.year : new Intl.DateTimeFormat(undefined,{month:'short'}).format(new Date(2024,m.month-1))}</span><div><i className="expense-bar" style={{width:`${m.expenses/max*100}%`}}/><i className="income-bar" style={{width:`${m.income/max*100}%`}}/></div><strong>{money(m.income-m.expenses, summary.currency)}</strong></div>) : <Empty text="No transactions in this selection."/>}</div></article><article className="panel"><h3>Expense categories</h3><p>{year === 'all' ? 'Spending across all years' : 'Year-to-date spending'}</p><div className="category-totals">{Object.entries(summary.categories || {}).map(([name,value]) => <div key={name}><span>{categoryLabel(name)}</span><strong>{money(value, summary.currency)}</strong></div>)}</div><h3 className="weekly-title">{year === 'all' ? 'Yearly totals' : 'Weekly totals'}</h3><div className="weekly-list">{(year === 'all' ? summary.years : summary.weeks)?.slice(-6).reverse().map(w => <div key={year === 'all' ? w.year : w.week}><span>{year === 'all' ? w.year : `Week ${w.week}`}</span><strong>{money(w.income-w.expenses, summary.currency)}</strong></div>)}{!(year === 'all' ? summary.years : summary.weeks)?.length && <span className="dim">No activity</span>}</div></article></div></section>
+  return <section><div className="section-head"><div><h2>Profit & loss</h2><p>Weekly, monthly, and yearly totals from uploaded transactions.</p></div><div className="report-filters"><label>Business / industry type<select name="report_business_activity" value={activity} onChange={e => setActivity(e.target.value)}><option value="">All business types</option>{BUSINESS_ACTIVITIES.map(([id, label]) => <option key={id} value={id}>{label}</option>)}</select></label><label>Year<select name="report_year" value={year} onChange={e => setYear(e.target.value === 'all' ? 'all' : Number(e.target.value))}><option value="all">All years</option>{reportYears.map(value => <option key={value} value={value}>{value}</option>)}</select></label></div></div><div className="stats finance-stats"><article><span>Total income</span><strong className="income">{money(summary.income, summary.currency)}</strong><small>{year === 'all' ? 'All years' : year} recorded income</small></article><article><span>Total expenses</span><strong>{money(summary.expenses, summary.currency)}</strong><small>{year === 'all' ? 'All years' : year} categorized spend</small></article><article><span>Net profit / loss</span><strong className={summary.profit_loss >= 0 ? 'income' : 'loss'}>{money(summary.profit_loss, summary.currency)}</strong><small>Income minus expenses</small></article></div><div className="stats finance-stats"><article><span>HST paid on expenses</span><strong>{money(summary.hst_paid || 0, 'CAD')}</strong><small>Recorded CAD HST for tax credit review</small></article><article><span>HST collected on income</span><strong>{money(summary.hst_collected || 0, 'CAD')}</strong><small>Tracked separately from expense HST</small></article><article><span>Expense receipts missing HST</span><strong>{summary.hst_missing_receipts || 0}</strong><small>Open these receipts to enter the tax amount</small></article></div><p className="tax-review-note">These are recorded amounts, not confirmed input tax credits. Retain the original receipts and review eligibility before claiming.{summary.hst_non_cad_receipts > 0 && ` ${summary.hst_non_cad_receipts} non-CAD receipts are excluded from HST totals.`}</p><div className="report-grid"><article className="panel"><h3>{year === 'all' ? 'Yearly overview' : 'Monthly overview'}</h3><p>Income and expenses by {year === 'all' ? 'year' : 'month'}</p><div className="bars">{periods.length ? periods.map(m => <div className="bar-row" key={year === 'all' ? m.year : m.month}><span>{year === 'all' ? m.year : new Intl.DateTimeFormat(undefined,{month:'short'}).format(new Date(2024,m.month-1))}</span><div><i className="expense-bar" style={{width:`${m.expenses/max*100}%`}}/><i className="income-bar" style={{width:`${m.income/max*100}%`}}/></div><strong>{money(m.income-m.expenses, summary.currency)}</strong></div>) : <Empty text="No transactions in this selection."/>}</div></article><article className="panel"><h3>Expense categories</h3><p>{year === 'all' ? 'Spending across all years' : 'Year-to-date spending'}</p><div className="category-totals">{Object.entries(summary.categories || {}).map(([name,value]) => <div key={name}><span>{categoryLabel(name)}</span><strong>{money(value, summary.currency)}</strong></div>)}</div><h3 className="weekly-title">{year === 'all' ? 'Yearly totals' : 'Weekly totals'}</h3><div className="weekly-list">{(year === 'all' ? summary.years : summary.weeks)?.slice(-6).reverse().map(w => <div key={year === 'all' ? w.year : w.week}><span>{year === 'all' ? w.year : `Week ${w.week}`}</span><strong>{money(w.income-w.expenses, summary.currency)}</strong></div>)}{!(year === 'all' ? summary.years : summary.weeks)?.length && <span className="dim">No activity</span>}</div></article></div></section>
 }
 
 function categoryLabel(value) { return CATEGORIES.find(([id]) => id === value)?.[1] || value?.replaceAll('_',' ') || 'Other' }

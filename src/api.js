@@ -24,7 +24,8 @@ function sanitizeExternalUrls(value) {
   if ('web_url' in clean) {
     try {
       const url = new URL(clean.web_url)
-      if (url.protocol !== 'https:' || !['drive.google.com', 'docs.google.com'].includes(url.hostname)) delete clean.web_url
+      const oneDrive = clean.storage_provider === 'onedrive' && (['onedrive.live.com', '1drv.ms'].includes(url.hostname) || url.hostname.endsWith('.sharepoint.com'))
+      if (url.protocol !== 'https:' || url.username || url.password || (!oneDrive && !['drive.google.com', 'docs.google.com'].includes(url.hostname))) delete clean.web_url
     } catch { delete clean.web_url }
   }
   return clean
