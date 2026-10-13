@@ -15,7 +15,7 @@ const NAV = [
   ['audit', 'Audit log', '≡'],
 ]
 
-const JOB_SECTIONS = [['quotes', 'Quotes'], ['receipts', 'Receipts'], ['gas', 'Gas & vehicles'], ['rfis', 'RFIs'], ['drawings', 'Drawings'], ['budget', 'Budget']]
+const JOB_SECTIONS = [['quotes', 'Quotes'], ['receipts', 'Receipts'], ['gas', 'Gas & vehicles'], ['drawings', 'Drawings'], ['budget', 'Budget']]
 
 const ALL_PERMISSIONS = [
   'CONFIG_USERS_READ', 'CONFIG_USERS_CREATE', 'CONFIG_USERS_UPDATE', 'CONFIG_USERS_DELETE',
@@ -27,9 +27,9 @@ const ALL_PERMISSIONS = [
 const initials = (name = '') => name.split(/\s+/).map((part) => part[0]).join('').slice(0, 2).toUpperCase() || 'U'
 const fmtDate = (value) => value ? new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value)) : '—'
 
-function Login({ status }) {
+function Login({ status, onDevLogin }) {
   const pending = status === 'ACCESS_PENDING'
-  const bypass = import.meta.env.VITE_AUTH_MODE === 'bypass'
+  const bypass = import.meta.env.DEV && import.meta.env.VITE_AUTH_MODE === 'bypass'
   return <main className="login-shell">
     <section className="login-card">
       <img className="brand-logo" src={companyLogo} alt="Quintyne Realty inc"/>
@@ -37,7 +37,7 @@ function Login({ status }) {
       <h1>{pending ? 'Access request pending' : 'Welcome back'}</h1>
       <p className="muted">{pending ? 'Your account exists, but an administrator needs to activate it.' : bypass ? 'Development sign-in is bypassed. Start the backend and retry the connection.' : 'Sign in with your company Microsoft account to continue to the administration portal.'}</p>
       {!pending && !bypass && <a className="button microsoft" href={signInUrl}><span className="ms-grid">▪▪<br/>▪▪</span> Continue with Microsoft</a>}
-      {!pending && bypass && <button className="button microsoft" onClick={() => location.reload()}>Connect to local backend</button>}
+      {!pending && bypass && <button className="button microsoft" onClick={onDevLogin}>Sign in as Local Developer</button>}
       {pending && <button className="button" onClick={() => location.assign('/login')}>Try again</button>}
       <p className="login-foot">Protected access</p>
     </section>
@@ -216,7 +216,7 @@ function UploadForm({ type, onSave, onClose, onJobQueued, backgroundJob, job, ve
   const [form, setForm] = useState({
     document_type: type,
     transaction_type: restored.suggested_transaction_type || 'expense',
-    category: forceGas ? 'gas' : (restored.suggested_category || (type === 'rfi' ? 'job_expense' : 'other')),
+    category: forceGas ? 'gas' : (restored.suggested_category || ('other')),
     incurred_at: restored.suggested_date || new Date().toISOString().slice(0, 10),
     amount: restored.suggested_amount || '',
     vendor: restored.suggested_vendor || '',
@@ -224,14 +224,6 @@ function UploadForm({ type, onSave, onClose, onJobQueued, backgroundJob, job, ve
     link_type: job ? 'job' : '',
     link_id: job?.code || '',
     link_label: job?.name || '',
-    rfi_number: '',
-    rfi_subject: '',
-    rfi_question: '',
-    rfi_to: '',
-    rfi_attention_name: '',
-    rfi_attention_phone: '',
-    rfi_attention_email: '',
-    rfi_due_at: '',
     vehicle_id: vehicles.find(vehicle => vehicle.is_default)?.id || '',
     fuel_litres: restored.suggested_fuel_litres || restored.suggested_litres || '',
     ocr_text_override: restored.ocr_text || '',
@@ -300,7 +292,7 @@ function UploadForm({ type, onSave, onClose, onJobQueued, backgroundJob, job, ve
     setPreviewUrl('')
     setPreviewing(true)
     setPreviewReady(false)
-    setOcrMessage(filesArray.length > 1 ? `Queued ${filesArray.length} ${type === 'rfi' ? 'documents' : 'receipts'}! Reading first…` : `Reading ${type === 'rfi' ? 'document' : 'receipt'} and extracting details…`)
+    setOcrMessage(filesArray.length > 1 ? `Queued ${filesArray.length} ${'receipts'}! Reading first…` : `Reading ${'receipt'} and extracting details…`)
 
     const data = new FormData()
     data.append('file', primaryFile)
@@ -312,7 +304,7 @@ function UploadForm({ type, onSave, onClose, onJobQueued, backgroundJob, job, ve
       let attempts = 0
       while (requestId === previewRequest.current && ['queued', 'processing'].includes(job.status) && attempts < 300) {
         attempts += 1
-        setOcrMessage(job.status === 'processing' ? `Reading ${type === 'rfi' ? 'document' : 'receipt'} in the background…` : 'Processing OCR…')
+        setOcrMessage(job.status === 'processing' ? `Reading ${'receipt'} in the background…` : 'Processing OCR…')
         await new Promise(resolve => setTimeout(resolve, 800))
         job = await api(`/receipts/preview/${queued.job_id}`)
       }
@@ -377,9 +369,9 @@ function UploadForm({ type, onSave, onClose, onJobQueued, backgroundJob, job, ve
     <DropZone
       multiple
       currentFileName={uploadName}
-      title={type === 'rfi' ? 'Drop RFI screenshots or PDFs here' : 'Drop receipt images or PDFs here'}
-      subtitle={type === 'rfi' ? 'Select or drop files · Tap to browse' : 'Supports multiple receipts, camera photos & PDF · OCR runs automatically'}
-      icon={type === 'rfi' ? '📋' : '🧾'}
+      title={'Drop receipt images or PDFs here'}
+      subtitle={'Supports multiple receipts, camera photos & PDF · OCR runs automatically'}
+      icon={'🧾'}
       allowCamera={true}
       onFilesSelected={selectFiles}
     />
@@ -389,14 +381,14 @@ function UploadForm({ type, onSave, onClose, onJobQueued, backgroundJob, job, ve
     {hasUpload && (
       <details className="ocr-details-toggle" open>
         <summary className="ocr-toggle-summary">
-          <span>🔍 View {type === 'rfi' ? 'document' : 'receipt'} preview & extracted text</span>
+          <span>🔍 View {'receipt'} preview & extracted text</span>
           <small className="ocr-toggle-badge">{previewing ? 'Reading…' : form.ocr_text_override ? 'Text captured' : 'Tap to collapse / expand'}</small>
         </summary>
         <section className="ocr-review">
           <div className="receipt-preview">
             {uploadMime.startsWith('image/') ? (
               previewImageFailed ? <div><span>!</span><strong>Image preview unavailable</strong></div> :
-              previewUrl ? <img src={previewUrl} alt={type === 'rfi' ? 'Document preview' : 'Receipt preview'} onError={() => setPreviewImageFailed(true)}/> :
+              previewUrl ? <img src={previewUrl} alt={'Receipt preview'} onError={() => setPreviewImageFailed(true)}/> :
               <div><div className="spinner small"/><strong>Loading preview…</strong></div>
             ) : <div><span>PDF</span><strong>{uploadName}</strong></div>}
           </div>
@@ -407,7 +399,7 @@ function UploadForm({ type, onSave, onClose, onJobQueued, backgroundJob, job, ve
                 rows="9"
                 value={form.ocr_text_override}
                 onChange={e => setForm({ ...form, ocr_text_override: e.target.value })}
-                placeholder={type === 'rfi' ? 'No text detected—type RFI details here' : 'No text detected—type receipt details here'}
+                placeholder={'No text detected—type receipt details here'}
               />
             </label>
           </div>
@@ -447,23 +439,7 @@ function UploadForm({ type, onSave, onClose, onJobQueued, backgroundJob, job, ve
       </>
     )}
 
-    {type === 'rfi' && (
-      <fieldset>
-        <legend>RFI request</legend>
-        <div className="form-row">
-          <label>RFI number<input name="rfi_number" maxLength="80" value={form.rfi_number} onChange={e => setForm({ ...form, rfi_number: e.target.value })} placeholder="RFI 031"/></label>
-          <label>Response required by<input name="rfi_due_at" type="date" value={form.rfi_due_at} onChange={e => setForm({ ...form, rfi_due_at: e.target.value })}/></label>
-        </div>
-        <label>Subject<input name="rfi_subject" maxLength="200" value={form.rfi_subject} onChange={e => setForm({ ...form, rfi_subject: e.target.value })} placeholder="Thermostat locations"/></label>
-        <label>To - company and mailing address<textarea name="rfi_to" rows="4" maxLength="1000" value={form.rfi_to} onChange={e => setForm({ ...form, rfi_to: e.target.value })} placeholder="Company name, address, and any additional recipients"/></label>
-        <div className="form-row">
-          <label>Attention<input name="rfi_attention_name" maxLength="200" value={form.rfi_attention_name} onChange={e => setForm({ ...form, rfi_attention_name: e.target.value })} placeholder="Contact name"/></label>
-          <label>Phone<input name="rfi_attention_phone" type="tel" maxLength="80" value={form.rfi_attention_phone} onChange={e => setForm({ ...form, rfi_attention_phone: e.target.value })}/></label>
-        </div>
-        <label>Attention email<input name="rfi_attention_email" type="email" maxLength="200" value={form.rfi_attention_email} onChange={e => setForm({ ...form, rfi_attention_email: e.target.value })}/></label>
-        <label>Information requested<textarea name="rfi_question" rows="5" maxLength="5000" value={form.rfi_question} onChange={e => setForm({ ...form, rfi_question: e.target.value })} placeholder="Describe the clarification needed"/></label>
-      </fieldset>
-    )}
+
 
     <fieldset>
       <legend>Link to work (optional)</legend>
@@ -477,7 +453,7 @@ function UploadForm({ type, onSave, onClose, onJobQueued, backgroundJob, job, ve
     <footer>
       <button type="button" className="button secondary" onClick={onClose}>Cancel</button>
       <button className="button" disabled={busy || previewing || !hasUpload}>
-        {busy ? 'Uploading…' : previewing ? 'Reading…' : `Confirm & upload ${type === 'rfi' ? 'RFI' : 'receipt'}`}
+        {busy ? 'Uploading…' : previewing ? 'Reading…' : `Confirm & upload ${'receipt'}`}
       </button>
     </footer>
   </form>
@@ -596,25 +572,13 @@ export default function App() {
     if (failures.length) flash(`${failures.length} receipt${failures.length > 1 ? 's' : ''} could not be queued. ${failures[0]}`, 'error')
     if (Array.from(selectedFiles || []).length > 20) flash('Only the first 20 receipts were queued. Upload the remaining files as another batch.', 'error')
   }
-  const createRfi = async (job, data, files) => {
-    const created = await api(`/jobs/${job.id}/rfis`, { method: 'POST', body: JSON.stringify(data) })
-    let failed = 0
-    for (const file of files) {
-      const body = new FormData(); body.append('file', file)
-      try { await api(`/receipts/${created.id}/attachments`, { method: 'POST', body }) }
-      catch { failed += 1 }
-    }
-    setModal(null)
-    flash(failed ? `RFI created, but ${failed} attachment${failed === 1 ? '' : 's'} could not be added. Open the RFI to retry.` : 'RFI created.', failed ? 'error' : 'success')
-    await load(true)
-  }
   const uploadDocument = async (form, previewJobId) => { try { await api(previewJobId ? `/receipts/from-preview/${previewJobId}` : '/receipts', { method: 'POST', body: form }); if (previewJobId) setReceiptJobs(current => current.filter(job => job.job_id !== previewJobId)); setModal(null); flash('Upload saved with the reviewed OCR details.'); await load(true) } catch (e) { flash(e.message, 'error') } }
   const removeReceipt = async (item) => { if (!confirm(`Delete ${item.filename}?`)) return; try { await api(`/receipts/${item.id}`, { method: 'DELETE' }); flash('Document deleted.'); await load() } catch (e) { flash(e.message, 'error') } }
   const removeUser = async (user) => { if (!confirm(`Delete ${user.full_name}? This action disables their access.`)) return; try { await api(`/configuration/users/${user.id}`, { method: 'DELETE' }); flash('User deleted.'); await load() } catch (e) { flash(e.message, 'error') } }
   const logout = async () => { try { await api('/auth/logout', { method: 'POST' }) } finally { setReceiptJobs([]); setSession(null) } }
 
   if (loading) return <div className="loading"><div className="spinner"/><span>Loading Quintyne Realty inc…</span></div>
-  if (!session) return <Login status={status} />
+  if (!session) return <Login status={status} onDevLogin={load} />
 
   const changeView = (next) => { setView(next); setMobileMenu(false); window.scrollTo({ top: 0, behavior: 'smooth' }) }
   const activeJobCount = receiptJobs.filter(job => ['queued', 'processing'].includes(job.status)).length
@@ -631,7 +595,7 @@ export default function App() {
       {view === 'overview' && <Overview users={users} roles={roles} logs={logs} user={session.user} setView={setView} />}
       {view === 'users' && <section><div className="section-head"><div><h2>People with access</h2><p>Manage accounts, roles, and activation status.</p></div>{can('CONFIG_USERS_CREATE') && <button className="button" onClick={() => setModal({ type: 'user' })}>+ Add user</button>}</div><div className="toolbar"><input name="user_search" type="search" value={query} onChange={e => setQuery(e.target.value)} placeholder="Search users…"/><span>{filteredUsers.length} users</span></div><div className="table-wrap"><table><thead><tr><th>User</th><th>Roles</th><th>Status</th><th>Last activity</th><th/></tr></thead><tbody>{filteredUsers.map(u => <tr key={u.id}><td><div className="person"><div className="avatar soft">{initials(u.full_name)}</div><div><strong>{u.full_name}</strong><span>{u.email}</span></div></div></td><td>{u.is_super_admin ? <span className="tag purple">Super admin</span> : u.role_ids?.length ? <span className="tag">{u.role_ids.length} role{u.role_ids.length > 1 ? 's' : ''}</span> : <span className="dim">No role</span>}</td><td><span className={`status ${u.is_active ? 'on' : 'off'}`}>{u.is_active ? 'Active' : 'Inactive'}</span></td><td>{fmtDate(u.last_activity_at)}</td><td className="actions">{can('CONFIG_USERS_UPDATE') && <button onClick={() => setModal({ type: 'user', user: u })}>Edit</button>}{can('CONFIG_USERS_DELETE') && u.id !== session.user.id && <button className="danger-link" onClick={() => removeUser(u)}>Delete</button>}</td></tr>)}</tbody></table>{!filteredUsers.length && <Empty text="No users match your search."/>}</div></section>}
       {view === 'roles' && <section><div className="section-head"><div><h2>Roles & permissions</h2><p>Group permissions into reusable access profiles.</p></div>{can('CONFIG_ROLES_CREATE') && <button className="button" onClick={() => setModal({ type: 'role' })}>+ New role</button>}</div><div className="card-grid">{roles.map(r => <article className="role-card" key={r.id}><div className="role-icon">◇</div><div className="role-title"><h3>{r.name}</h3><span className={`status ${r.is_active ? 'on' : 'off'}`}>{r.is_active ? 'Active' : 'Inactive'}</span></div><code>{r.code}</code><p>{r.permissions?.length || 0} permissions assigned</p><div className="chips">{r.permissions?.slice(0, 3).map(p => <span key={p}>{p.replaceAll('_', ' ').toLowerCase()}</span>)}{r.permissions?.length > 3 && <span>+{r.permissions.length - 3} more</span>}</div>{can('CONFIG_ROLES_UPDATE') && <button className="text-button" onClick={() => setModal({ type: 'role', role: r })}>Edit role →</button>}</article>)}{!roles.length && <Empty text="No roles have been created."/>}</div></section>}
-      {view === 'jobs' && <JobsView vehicles={vehicles} allReceipts={receipts} jobs={jobs} receiptJobs={receiptJobs} can={can} onCreateRfi={job => setModal({type:'rfi-create', job})} jobSection={jobSection} setJobSection={setJobSection} onRefresh={() => load(true)} onReceiptFiles={startBackgroundReceipts} onOpenPreview={(job, backgroundJob) => setModal({type:'upload', documentType:backgroundJob.documentType, backgroundJob, job})} onUploadDocument={(job, documentType) => setModal({type:'upload', documentType, job})} onViewReport={(job, receipt) => { setReportJobId(job.id); setReportYear(new Date(receipt.incurred_at).getUTCFullYear()); setView('reports') }}/>}
+      {view === 'jobs' && <JobsView vehicles={vehicles} allReceipts={receipts} jobs={jobs} receiptJobs={receiptJobs} can={can} jobSection={jobSection} setJobSection={setJobSection} onRefresh={() => load(true)} onReceiptFiles={startBackgroundReceipts} onOpenPreview={(job, backgroundJob) => setModal({type:'upload', documentType:backgroundJob.documentType, backgroundJob, job})} onUploadDocument={(job, documentType) => setModal({type:'upload', documentType, job})} onViewReport={(job, receipt) => { setReportJobId(job.id); setReportYear(new Date(receipt.incurred_at).getUTCFullYear()); setView('reports') }}/>}
       {view === 'reports' && <Reports summary={summary} year={reportYear} setYear={setReportYear} jobs={jobs} receipts={receipts} jobId={reportJobId} setJobId={setReportJobId}/>} 
       {view === 'audit' && <section><div className="section-head"><div><h2>Audit log</h2><p>A chronological record of administrative activity.</p></div><button className="button secondary" onClick={() => api('/audit-logs?limit=100').then(setLogs)}>Refresh</button></div><div className="table-wrap"><table><thead><tr><th>Event</th><th>Resource</th><th>Actor</th><th>Date & time</th></tr></thead><tbody>{logs.map(log => <tr key={log.id}><td><strong>{log.action?.replaceAll('_', ' ') || 'EVENT'}</strong></td><td>{log.resource_type || '—'} <span className="dim">{log.resource_id?.slice?.(0, 8)}</span></td><td className="mono">{log.actor_id?.slice?.(0, 8) || 'System'}</td><td>{fmtDate(log.created_at)}</td></tr>)}</tbody></table>{!logs.length && <Empty text="No audit activity to show."/>}</div></section>}
     </main>
@@ -642,13 +606,12 @@ export default function App() {
     </nav>
     {modal?.type === 'user' && <Modal title={modal.user ? 'Edit user' : 'Add a user'} onClose={() => setModal(null)}><UserForm roles={roles} user={modal.user} onSave={saveUser} onClose={() => setModal(null)}/></Modal>}
     {modal?.type === 'role' && <Modal title={modal.role ? 'Edit role' : 'Create a role'} onClose={() => setModal(null)}><RoleForm role={modal.role} onSave={saveRole} onClose={() => setModal(null)}/></Modal>}
-    {modal?.type === 'rfi-create' && <RfiCreateForm job={modal.job} onSave={(data, files) => createRfi(modal.job, data, files)} onClose={() => setModal(null)}/>}
-    {modal?.type === 'upload' && <Modal title={modal.documentType === 'rfi' ? 'Upload RFI screenshot' : 'Upload receipt'} onClose={() => setModal(null)}><UploadForm type={modal.documentType === 'gas-receipt' ? 'receipt' : modal.documentType} forceGas={modal.documentType === 'gas-receipt'} vehicles={vehicles} backgroundJob={modal.backgroundJob} job={modal.job} onJobQueued={queueReceiptJob} onSave={uploadDocument} onClose={() => setModal(null)}/></Modal>}
+    {modal?.type === 'upload' && <Modal title={'Upload receipt'} onClose={() => setModal(null)}><UploadForm type={modal.documentType === 'gas-receipt' ? 'receipt' : modal.documentType} forceGas={modal.documentType === 'gas-receipt'} vehicles={vehicles} backgroundJob={modal.backgroundJob} job={modal.job} onJobQueued={queueReceiptJob} onSave={uploadDocument} onClose={() => setModal(null)}/></Modal>}
   </div>
 }
 
 
-function JobsView({ vehicles, allReceipts, jobs, receiptJobs, can, jobSection, setJobSection, onCreateRfi, onRefresh, onReceiptFiles, onOpenPreview, onUploadDocument, onViewReport }) {
+function JobsView({ vehicles, allReceipts, jobs, receiptJobs, can, jobSection, setJobSection, onRefresh, onReceiptFiles, onOpenPreview, onUploadDocument, onViewReport }) {
   const [selectedId, setSelectedId] = useState(null)
   const [jobSearch, setJobSearch] = useState('')
   const [companyDraft, setCompanyDraft] = useState('')
@@ -716,7 +679,7 @@ function JobsView({ vehicles, allReceipts, jobs, receiptJobs, can, jobSection, s
   useEffect(() => {
     setDocumentPreviewUrl('')
     setDocumentPreviewError(false)
-    if (!selectedDocument || selectedDocument.document_type === 'rfi') return undefined
+    if (!selectedDocument) return undefined
     if (selectedDocument.web_url) {
       setDocumentPreviewUrl(selectedDocument.web_url)
       return undefined
@@ -782,249 +745,10 @@ function JobsView({ vehicles, allReceipts, jobs, receiptJobs, can, jobSection, s
     catch (error) { alert(error.message) }
   }
   const section = (title, key, kind) => {
-    if (key === 'rfis') {
-      const items = detail?.rfis || []
-      const waiting = items.filter(item => item.status !== 'closed' && !item.closed_at && (!item.responses || item.responses.length === 0))
-      const closed = items.filter(item => item.status === 'closed' || item.closed_at || (item.responses && item.responses.length > 0))
-
-      return <section className="panel job-section">
-        <div className="section-head">
-          <div><h2>{title}</h2><p>{waiting.length} waiting for reply · {closed.length} closed ({items.length} total)</p></div>
-          {can('RECEIPTS_CREATE') && <button className="button" onClick={() => onCreateRfi(selected)}>+ Create RFI</button>}
-        </div>
-        {can('RECEIPTS_CREATE') && <DropZone compact multiple icon="📋" title="Drop RFI screenshots or PDFs here" subtitle="Upload and link existing RFI to this job" onFilesSelected={files => onUploadDocument(selected, 'rfi')}/>}
-
-        <div className="rfi-waiting-section">
-          <div className="rfi-waiting-header">
-            <h3 className="rfi-waiting-title"><span>⏳</span> Waiting for reply ({waiting.length})</h3>
-            {waiting.length > 0 && <span className="status off" style={{ fontSize: '11px' }}>Action required</span>}
-          </div>
-          {waiting.length > 0 ? (
-            <div className="document-grid">
-              {waiting.map(item => (
-                <article className="document-card rfi-waiting-card" key={item.id}>
-                  <button type="button" className="doc-main receipt-details-trigger" onClick={() => setSelectedDocument(item)} aria-label={`View details for ${item.rfi_subject || item.vendor || item.filename || item.rfi_number || 'RFI'}`}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', width: '100%', gap: '8px' }}>
-                      <h3>{item.rfi_number ? `${item.rfi_number} · ${item.rfi_subject || item.filename}` : (item.rfi_subject || item.vendor || item.filename)}</h3>
-                      <span className="status off" style={{ whiteSpace: 'nowrap', fontSize: '10px' }}>Waiting for reply</span>
-                    </div>
-                    <p>{item.rfi_to ? `To: ${item.rfi_to}` : (item.filename || 'Created in app')}</p>
-                    <div className="doc-meta">
-                      {item.rfi_due_at && <span className="rfi-due-badge">Due: {fmtDate(item.rfi_due_at)}</span>}
-                      <span>Created: {fmtDate(item.created_at || item.incurred_at)}</span>
-                    </div>
-                    <span className="receipt-view-hint" style={{ color: '#b45309', fontWeight: 600 }}>Respond / View details →</span>
-                  </button>
-                  {(item.web_url || item.mime_type) && <a className="open-file" href={item.web_url || `${API_URL}/receipts/${item.id}/file`} target="_blank" rel="noreferrer">Open</a>}
-                </article>
-              ))}
-            </div>
-          ) : (
-            <div style={{ padding: '14px', background: '#ffffff', borderRadius: '8px', border: '1px dashed #fcd34d', textAlign: 'center', color: '#78350f', fontSize: '13px' }}>
-              ✓ All RFIs have received a reply. None currently waiting.
-            </div>
-          )}
-        </div>
-
-        {closed.length > 0 && (
-          <div className="rfi-closed-section">
-            <h3 style={{ fontSize: '15px', fontWeight: 600, margin: '0 0 12px 0', color: '#1f2937', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <span>✓</span> Closed & answered ({closed.length})
-            </h3>
-            <div className="document-grid">
-              {closed.map(item => (
-                <article className="document-card" key={item.id} style={{ opacity: 0.9 }}>
-                  <button type="button" className="doc-main receipt-details-trigger" onClick={() => setSelectedDocument(item)} aria-label={`View details for ${item.rfi_subject || item.vendor || item.filename || item.rfi_number || 'RFI'}`}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', width: '100%', gap: '8px' }}>
-                      <h3>{item.rfi_number ? `${item.rfi_number} · ${item.rfi_subject || item.filename}` : (item.rfi_subject || item.vendor || item.filename)}</h3>
-                      <span className="status on" style={{ whiteSpace: 'nowrap', fontSize: '10px' }}>Closed</span>
-                    </div>
-                    <p>{item.filename || item.rfi_subject || 'Created in app'}</p>
-                    <div className="doc-meta">
-                      <span>Answered: {fmtDate(item.closed_at || item.created_at)}</span>
-                    </div>
-                    <span className="receipt-view-hint">View details</span>
-                  </button>
-                  {(item.web_url || item.mime_type) && <a className="open-file" href={item.web_url || `${API_URL}/receipts/${item.id}/file`} target="_blank" rel="noreferrer">Open</a>}
-                </article>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {!items.length && <Empty text="No RFIs created or attached yet."/>}
-      </section>
-    }
-
-    return <section className="panel job-section"><div className="section-head"><div><h2>{title}</h2><p>{detail?.[key]?.length || 0} attached</p></div>{key === 'quotes' && can('JOBS_UPDATE') && <button type="button" className="button" onClick={() => setQuoteEditor({})}>+ New quote</button>}{!kind && can('RECEIPTS_CREATE') && (key === 'rfis' ? <button className="button" onClick={() => onCreateRfi(selected)}>+ Create RFI</button> : <button className="button" onClick={() => onUploadDocument(selected, 'receipt')}>+ Add receipt</button>)}</div>{kind && can('JOBS_UPDATE') && <DropZone compact multiple={false} icon="📐" title={`Drop ${kind} file here or browse`} subtitle={`Attach ${kind} image or PDF to ${selected.code}`} onFilesSelected={files => upload(kind, files[0])}/>}{key === 'receipts' && can('RECEIPTS_CREATE') && <DropZone compact multiple icon="🧾" title="Drop receipts here to attach to this job" subtitle="Uploads and extracts details with OCR automatically" onFilesSelected={onReceiptFiles}/>}{key === 'receipts' && receiptJobs.length > 0 && <details className="job-previews-details ocr-details-toggle" open style={{ marginTop: '16px', marginBottom: '16px' }}><summary className="ocr-toggle-summary" style={{ padding: '10px 14px', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '8px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><span style={{ fontWeight: 600, color: '#166534', display: 'flex', alignItems: 'center', gap: '8px' }}><span>🧾</span> Receipt previews ({receiptJobs.length})</span><small className="ocr-toggle-badge" style={{ background: '#dcfce7', color: '#15803d' }}>{receiptJobs.some(j => ['queued', 'processing'].includes(j.status)) ? 'Reading receipts…' : 'Tap to collapse / expand'}</small></summary><div style={{ marginTop: '12px', paddingLeft: '4px', paddingRight: '4px' }}><p style={{ margin: '0 0 12px 0', fontSize: '13px', color: '#555e70' }}>Review and confirm previews before they are finalized into this job.</p>{receiptJobs.map(preview => <div className={`background-job ${preview.status}`} key={preview.job_id} style={{ marginBottom: '8px' }}><div className={['queued','processing'].includes(preview.status) ? 'spinner small' : 'job-ready'}>{preview.status === 'completed' ? '✓' : preview.status === 'failed' ? '!' : ''}</div><div><strong>{preview.filename}</strong><span>{preview.status === 'completed' ? 'OCR preview ready · Tap Review to finalize' : preview.status === 'failed' ? (preview.error || 'OCR failed—manual review available') : 'Processing receipt in the background…'}</span></div><button className="button secondary" onClick={() => onOpenPreview(selected, preview)} disabled={!['completed','failed'].includes(preview.status)}>Review</button></div>)}</div></details>}<div className="document-grid">{(detail?.[key] || []).map(item => item.record_type === 'structured_quote' ? <article className="document-card quote-card" key={item.id}><div className="doc-main"><h3>{item.title}</h3><p>{item.items?.length || 0} items · {money(item.total, item.currency || 'CAD')}</p><ul>{item.items?.slice(0, 3).map((line, index) => <li key={index}>{line.quantity} × {line.name}</li>)}</ul></div><div className="quote-card-actions">{can('JOBS_READ') && <QuotePdfButton jobId={selectedId} quote={item}/>}{can('JOBS_UPDATE') && <><button type="button" className="open-file" onClick={() => setQuoteEditor(item)}>Edit quote</button><button type="button" className="delete-file" onClick={() => removeQuote(item)} aria-label={`Remove ${item.title}`}>×</button></>}</div></article> : <article className="document-card" key={item.id}><button type="button" className="doc-main receipt-details-trigger" onClick={() => !kind && setSelectedDocument(item)} aria-label={`View details for ${item.rfi_subject || item.vendor || item.filename || item.rfi_number || 'RFI'}`} disabled={Boolean(kind)}><h3>{item.rfi_number || item.rfi_subject || item.vendor || item.filename}</h3><p>{item.filename || item.rfi_subject || 'Created in app'}</p><div className="doc-meta">{item.document_type === 'rfi' && <span className={`status ${item.status === 'closed' || item.closed_at ? 'on' : 'off'}`}>{item.status === 'closed' || item.closed_at ? 'Closed' : 'Open'}</span>}{item.document_type === 'receipt' ? <><span>Receipt date: {fmtDate(item.incurred_at)}</span><span>Uploaded: {fmtDate(item.created_at)}</span></> : <span>{fmtDate(item.created_at || item.incurred_at)}</span>}{item.amount != null && item.document_type === 'receipt' && <span>{money(item.amount, item.currency)}</span>}</div>{!kind && <span className="receipt-view-hint">View details</span>}</button>{kind ? <a className="open-file" href={item.web_url || `${API_URL}/jobs/${selectedId}/files/${item.id}`} target="_blank" rel="noreferrer">Open</a> : (item.web_url || item.mime_type) && <a className="open-file" href={item.web_url || `${API_URL}/receipts/${item.id}/file`} target="_blank" rel="noreferrer">Open</a>}{item.document_type === 'receipt' && item.amount != null && <button type="button" className="open-file" onClick={() => onViewReport(selected, item)}>View in report</button>}{kind && can('JOBS_UPDATE') && <button className="delete-file" onClick={() => remove(item)} aria-label={`Remove ${item.filename}`}>x</button>}</article>)}{!detail?.[key]?.length && <Empty text={`No ${title.toLowerCase()} attached yet.`}/>}</div></section>
+    return <section className="panel job-section"><div className="section-head"><div><h2>{title}</h2><p>{detail?.[key]?.length || 0} attached</p></div>{key === 'quotes' && can('JOBS_UPDATE') && <button type="button" className="button" onClick={() => setQuoteEditor({})}>+ New quote</button>}{!kind && can('RECEIPTS_CREATE') && <button className="button" onClick={() => onUploadDocument(selected, 'receipt')}>+ Add receipt</button>}</div>{kind && can('JOBS_UPDATE') && <DropZone compact multiple={false} icon="📐" title={`Drop ${kind} file here or browse`} subtitle={`Attach ${kind} image or PDF to ${selected.code}`} onFilesSelected={files => upload(kind, files[0])}/>}{key === 'receipts' && can('RECEIPTS_CREATE') && <DropZone compact multiple icon="🧾" title="Drop receipts here to attach to this job" subtitle="Uploads and extracts details with OCR automatically" onFilesSelected={onReceiptFiles}/>}{key === 'receipts' && receiptJobs.length > 0 && <details className="job-previews-details ocr-details-toggle" open style={{ marginTop: '16px', marginBottom: '16px' }}><summary className="ocr-toggle-summary" style={{ padding: '10px 14px', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '8px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><span style={{ fontWeight: 600, color: '#166534', display: 'flex', alignItems: 'center', gap: '8px' }}><span>🧾</span> Receipt previews ({receiptJobs.length})</span><small className="ocr-toggle-badge" style={{ background: '#dcfce7', color: '#15803d' }}>{receiptJobs.some(j => ['queued', 'processing'].includes(j.status)) ? 'Reading receipts…' : 'Tap to collapse / expand'}</small></summary><div style={{ marginTop: '12px', paddingLeft: '4px', paddingRight: '4px' }}><p style={{ margin: '0 0 12px 0', fontSize: '13px', color: '#555e70' }}>Review and confirm previews before they are finalized into this job.</p>{receiptJobs.map(preview => <div className={`background-job ${preview.status}`} key={preview.job_id} style={{ marginBottom: '8px' }}><div className={['queued','processing'].includes(preview.status) ? 'spinner small' : 'job-ready'}>{preview.status === 'completed' ? '✓' : preview.status === 'failed' ? '!' : ''}</div><div><strong>{preview.filename}</strong><span>{preview.status === 'completed' ? 'OCR preview ready · Tap Review to finalize' : preview.status === 'failed' ? (preview.error || 'OCR failed—manual review available') : 'Processing receipt in the background…'}</span></div><button className="button secondary" onClick={() => onOpenPreview(selected, preview)} disabled={!['completed','failed'].includes(preview.status)}>Review</button></div>)}</div></details>}<div className="document-grid">{(detail?.[key] || []).map(item => item.record_type === 'structured_quote' ? <article className="document-card quote-card" key={item.id}><div className="doc-main"><h3>{item.title}</h3><p>{item.items?.length || 0} items · {money(item.total, item.currency || 'CAD')}</p><ul>{item.items?.slice(0, 3).map((line, index) => <li key={index}>{line.quantity} × {line.name}</li>)}</ul></div><div className="quote-card-actions">{can('JOBS_READ') && <QuotePdfButton jobId={selectedId} quote={item}/>}{can('JOBS_UPDATE') && <><button type="button" className="open-file" onClick={() => setQuoteEditor(item)}>Edit quote</button><button type="button" className="delete-file" onClick={() => removeQuote(item)} aria-label={`Remove ${item.title}`}>×</button></>}</div></article> : <article className="document-card" key={item.id}><button type="button" className="doc-main receipt-details-trigger" onClick={() => !kind && setSelectedDocument(item)} aria-label={`View details for ${item.vendor || item.filename || 'Receipt'}`} disabled={Boolean(kind)}><h3>{item.vendor || item.filename}</h3><p>{item.filename || 'Created in app'}</p><div className="doc-meta">{item.document_type === 'receipt' ? <><span>Receipt date: {fmtDate(item.incurred_at)}</span><span>Uploaded: {fmtDate(item.created_at)}</span></> : <span>{fmtDate(item.created_at || item.incurred_at)}</span>}{item.amount != null && item.document_type === 'receipt' && <span>{money(item.amount, item.currency)}</span>}</div>{!kind && <span className="receipt-view-hint">View details</span>}</button>{kind ? <a className="open-file" href={item.web_url || `${API_URL}/jobs/${selectedId}/files/${item.id}`} target="_blank" rel="noreferrer">Open</a> : (item.web_url || item.mime_type) && <a className="open-file" href={item.web_url || `${API_URL}/receipts/${item.id}/file`} target="_blank" rel="noreferrer">Open</a>}{item.document_type === 'receipt' && item.amount != null && <button type="button" className="open-file" onClick={() => onViewReport(selected, item)}>View in report</button>}{kind && can('JOBS_UPDATE') && <button className="delete-file" onClick={() => remove(item)} aria-label={`Remove ${item.filename}`}>x</button>}</article>)}{!detail?.[key]?.length && <Empty text={`No ${title.toLowerCase()} attached yet.`}/>}</div></section>
   }
-  return <section><div className="section-head"><div><h2>Jobs</h2><p>Keep receipts, quotes, drawings, and RFIs together.</p></div></div><div className="job-selector panel"><label htmlFor="job-search">Search jobs</label><div className="job-search-wrap" onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) setSearchOpen(false) }}><input id="job-search" type="search" role="combobox" aria-autocomplete="list" aria-expanded={searchOpen} aria-controls="job-suggestions" aria-activedescendant={searchOpen && suggestions.length ? `job-option-${suggestions[activeSuggestion]?.id}` : undefined} autoComplete="off" value={jobSearch} onFocus={() => setSearchOpen(true)} onChange={event => { setJobSearch(event.target.value); setActiveSuggestion(0); setSearchOpen(true) }} onKeyDown={onSearchKeyDown} placeholder="Search by job or code, or create a job"/>{searchOpen && <div id="job-suggestions" className="job-suggestions" role="listbox">{suggestions.map((job, index) => <button type="button" role="option" aria-selected={index === activeSuggestion} id={`job-option-${job.id}`} key={job.id} className={index === activeSuggestion ? 'active' : ''} onMouseEnter={() => setActiveSuggestion(index)} onClick={() => selectJob(job)}><strong>{job.code} · {job.name}</strong><span>{job.company || 'Company not set'}</span></button>)}{!suggestions.length && <p>No jobs match your search.</p>}{shouldSuggestCreate && <button type="button" className="job-create-suggestion" onClick={openCreateForCompany}><strong>+ Create job for {jobSearch.trim()}</strong><span>Company will be filled in for you</span></button>}{matchingJobs.length > suggestions.length && <small>Keep typing to narrow {matchingJobs.length} matches.</small>}</div>}</div><div className="job-search-footer"><small>{selected ? `Selected: ${selected.code} · ${selected.name}` : `${jobs.length} jobs available`}</small>{can('JOBS_CREATE') && <button type="button" className="button secondary" onClick={openCreateForCompany}>+ Create job</button>}</div></div>{can('JOBS_CREATE') && <details className="job-create panel" ref={createPanel}><summary>+ Create job</summary><form className="form" onSubmit={create}><div className="form-row"><label>Job code<input name="code" required maxLength="80" value={form.code} onChange={event => setForm({...form, code: event.target.value})} placeholder="JOB-1042"/></label><label>Job name<input name="name" required maxLength="200" value={form.name} onChange={event => setForm({...form, name: event.target.value})} placeholder="Project name"/></label></div><label>Company<input name="company" maxLength="200" value={form.company} onChange={event => setForm({...form, company: event.target.value})} placeholder="Client or company name"/></label><label>Description<input name="description" maxLength="2000" value={form.description} onChange={event => setForm({...form, description: event.target.value})}/></label><button className="button" disabled={busy}>{busy ? 'Creating...' : '+ Create job'}</button></form></details>}{!jobs.length && <Empty text="No jobs yet. Create one to attach its documents."/>}{selected && <div className="job-details" ref={jobDetailsRef}><h2>{selected.code}: {selected.name}</h2>{can('JOBS_UPDATE') ? <form className="job-company-editor" onSubmit={saveCompany}><label>Company<input name="company" maxLength="200" value={companyDraft} onChange={event => setCompanyDraft(event.target.value)} placeholder="Add company name"/></label><button type="submit" className="button secondary" disabled={companySaving || companyDraft.trim() === (selected.company || '')}>{companySaving ? 'Saving...' : 'Save company'}</button></form> : <p className="job-company-label">{selected.company || 'Company not set'}</p>}<div className="job-tabs" role="tablist" aria-label="Job documents">{JOB_SECTIONS.filter(([key]) => key !== 'gas').map(([key,label]) => <button type="button" role="tab" aria-selected={jobSection === key || (key === 'receipts' && jobSection === 'gas')} className={jobSection === key || (key === 'receipts' && jobSection === 'gas') ? 'active' : ''} key={key} onClick={() => setJobSection(key)}>{label}{key !== 'budget' && <span>{detail?.[key]?.length || 0}</span>}</button>)}</div><div role="tabpanel">{jobSection === 'budget' && <JobBudget job={selected} summary={detail?.budget} canEdit={can('JOBS_UPDATE')} onSave={saveBudget}/>} {jobSection === 'quotes' && section('Quotes', 'quotes', 'quote')}{jobSection === 'receipts' && section('Receipts', 'receipts')}{jobSection === 'gas' && <GasVehicles vehicles={vehicles} receipts={(allReceipts || []).filter(item => item.category === 'gas' && item.vehicle_id)} canCreate={can('RECEIPTS_CREATE')} canDelete={can('RECEIPTS_DELETE')} onRefresh={() => onRefresh()} onAddReceipt={() => onUploadDocument(selected, 'gas-receipt')}/>}{jobSection === 'rfis' && section('RFIs', 'rfis')}{jobSection === 'drawings' && section('Drawings', 'drawings', 'drawing')}</div></div>}{quoteEditor && selected && <QuoteForm job={selected} quote={quoteEditor.id ? quoteEditor : null} receipts={detail?.receipts || []} onSave={saveQuote} onClose={() => setQuoteEditor(null)}/>}{selectedDocument?.document_type === 'rfi' && <RfiDetails rfi={selectedDocument} job={selected} can={can} onClose={() => setSelectedDocument(null)}/>}
-        {selectedDocument && selectedDocument.document_type !== 'rfi' && <Modal title="Receipt details" onClose={() => setSelectedDocument(null)}><div className="receipt-info"><h3>{selectedDocument.vendor || selectedDocument.filename}</h3><details className="ocr-details-toggle" open style={{ marginBottom: '16px' }}><summary className="ocr-toggle-summary" style={{ padding: '12px 16px', background: '#f4f5fa', border: '1px solid var(--line)', borderRadius: '10px', cursor: 'pointer' }}><span>🔍 View image / document preview</span><small className="ocr-toggle-badge">Tap to collapse / expand</small></summary><div className="receipt-info-preview" style={{ margin: '12px 0 0 0' }}>{selectedDocument.web_url ? <div style={{ padding: '12px', background: '#eff6ff', borderRadius: '8px', border: '1px solid #bfdbfe' }}><p style={{ margin: '0 0 8px 0', color: '#1e40af' }}>Original file is stored in Google Drive.</p><a className="button" href={selectedDocument.web_url} target="_blank" rel="noreferrer">Open in Google Drive ↗</a></div> : documentPreviewUrl ? (selectedDocument.mime_type === 'application/pdf' ? <iframe title="Document preview" src={documentPreviewUrl}/> : <img src={documentPreviewUrl} alt={`Preview of ${selectedDocument.filename}`} onError={() => setDocumentPreviewError(true)}/>) : documentPreviewError ? <p>Preview unavailable. Open the original file below.</p> : <p>Loading preview...</p>}</div></details><dl><div><dt>File</dt><dd>{selectedDocument.filename}</dd></div><div><dt>Receipt date</dt><dd>{fmtDate(selectedDocument.incurred_at)}</dd></div><div><dt>Uploaded</dt><dd>{fmtDate(selectedDocument.created_at)}</dd></div>{selectedDocument.document_type === 'receipt' && <><div><dt>Amount</dt><dd>{selectedDocument.amount == null ? 'Not recorded' : money(selectedDocument.amount, selectedDocument.currency)}</dd></div><div><dt>Type</dt><dd>{selectedDocument.transaction_type || 'Expense'}</dd></div></>}<div><dt>Category</dt><dd>{categoryLabel(selectedDocument.category)}</dd></div><div><dt>Job</dt><dd>{selected?.code || selectedDocument.link_id}</dd></div></dl>{selectedDocument.ocr_text && <details className="ocr-details-toggle" open style={{ marginBottom: '16px' }}><summary className="ocr-toggle-summary" style={{ padding: '12px 16px', background: '#f4f5fa', border: '1px solid var(--line)', borderRadius: '10px', cursor: 'pointer' }}><span>📝 Extracted text</span><small className="ocr-toggle-badge">Tap to collapse</small></summary><pre style={{ margin: '12px 0 0 0' }}>{selectedDocument.ocr_text}</pre></details>}<a className="button" href={selectedDocument.web_url || `${API_URL}/receipts/${selectedDocument.id}/file`} target="_blank" rel="noreferrer">Open original file</a></div></Modal>}</section>
-}
-
-function RfiCreateForm({ job, onSave, onClose }) {
-  const [form, setForm] = useState({ rfi_number: '', rfi_subject: '', rfi_question: '', rfi_to: '', rfi_attention_name: '', rfi_attention_phone: '', rfi_attention_email: '', incurred_at: new Date().toISOString().slice(0, 10), rfi_due_at: '' })
-  const [busy, setBusy] = useState(false)
-  const [files, setFiles] = useState([])
-  const [error, setError] = useState('')
-  const submit = async (event) => {
-    event.preventDefault(); setBusy(true); setError('')
-    const data = { ...form, rfi_due_at: form.rfi_due_at || null }
-    try { await onSave(data, files) } catch (cause) { setError(cause.message) } finally { setBusy(false) }
-  }
-  return <Modal wide title={`New RFI for ${job.code}`} onClose={onClose}><form className="rfi-response-form rfi-create-form" onSubmit={submit}><p>Project: <strong>{job.name}</strong></p>{error && <p className="rfi-error">{error}</p>}<div className="form-row"><label>RFI number<input name="rfi_number" maxLength="80" value={form.rfi_number} onChange={e => setForm({...form, rfi_number: e.target.value})} placeholder="RFI 031"/></label><label>Request date<input name="incurred_at" required type="date" value={form.incurred_at} onChange={e => setForm({...form, incurred_at: e.target.value})}/></label></div><label>Subject<input name="rfi_subject" required maxLength="200" value={form.rfi_subject} onChange={e => setForm({...form, rfi_subject: e.target.value})} placeholder="Thermostat locations"/></label><label>To - company and mailing address<textarea name="rfi_to" rows="4" maxLength="1000" value={form.rfi_to} onChange={e => setForm({...form, rfi_to: e.target.value})} placeholder="Company name, address, and any additional recipients"/></label><div className="form-row"><label>Attention<input name="rfi_attention_name" maxLength="200" value={form.rfi_attention_name} onChange={e => setForm({...form, rfi_attention_name: e.target.value})} placeholder="Contact name"/></label><label>Phone<input name="rfi_attention_phone" type="tel" maxLength="80" value={form.rfi_attention_phone} onChange={e => setForm({...form, rfi_attention_phone: e.target.value})}/></label></div><label>Attention email<input name="rfi_attention_email" type="email" maxLength="200" value={form.rfi_attention_email} onChange={e => setForm({...form, rfi_attention_email: e.target.value})}/></label><label>Information requested<textarea name="rfi_question" required rows="7" maxLength="5000" value={form.rfi_question} onChange={e => setForm({...form, rfi_question: e.target.value})} placeholder="Describe the clarification needed"/></label><label>Response required by<input name="rfi_due_at" type="date" value={form.rfi_due_at} onChange={e => setForm({...form, rfi_due_at: e.target.value})}/></label><div style={{marginTop:'8px'}}><label style={{display:'block',fontSize:'12px',fontWeight:600,color:'#555e70',marginBottom:'6px'}}>Supporting images or PDFs</label><DropZone compact multiple icon="📎" title="Drop supporting files here or browse" subtitle={files.length > 0 ? `${files.length} file(s) attached: ${files.map(f => f.name).join(', ')}` : "Select or drop multiple files (PDF/images)"} onFilesSelected={selectedFiles => setFiles(cur => [...cur, ...Array.from(selectedFiles)])}/></div><div className="rfi-form-actions" style={{marginTop:'18px'}}><button type="button" className="button secondary" onClick={onClose}>Cancel</button><button className="button" disabled={busy}>{busy ? 'Creating...' : 'Create RFI'}</button></div></form></Modal>
-}
-
-function RfiDetails({ rfi, job, can, onClose }) {
-  const [responses, setResponses] = useState([])
-  const [shareUrl, setShareUrl] = useState('')
-  const [shareBusy, setShareBusy] = useState(false)
-  const [attachments, setAttachments] = useState([])
-  const [attachmentBusy, setAttachmentBusy] = useState(false)
-  const [attachmentError, setAttachmentError] = useState('')
-  const [loadError, setLoadError] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [previewError, setPreviewError] = useState(false)
-  const [responseFile, setResponseFile] = useState(null)
-  const [answer, setAnswer] = useState({ responder_name: '', response_text: '', responded_at: new Date().toISOString().slice(0, 10) })
-  const fileInput = useRef(null)
-  useEffect(() => {
-    let active = true
-    api(`/receipts/${rfi.id}/attachments`)
-      .then(items => { if (active) setAttachments(items) })
-      .catch(error => { if (active) setAttachmentError(error.message) })
-    api(`/receipts/${rfi.id}/responses`)
-      .then(items => { if (active) setResponses(items) })
-      .catch(error => { if (active) setLoadError(error.message) })
-    return () => { active = false }
-  }, [rfi.id])
-  const submit = async (event) => {
-    event.preventDefault(); setBusy(true)
-    const data = new FormData()
-    Object.entries(answer).forEach(([key, value]) => data.append(key, value))
-    if (responseFile) data.append('file', responseFile)
-    try {
-      const saved = await api(`/receipts/${rfi.id}/responses`, { method: 'POST', body: data })
-      setResponses(current => [...current, saved])
-      setAnswer({ responder_name: '', response_text: '', responded_at: new Date().toISOString().slice(0, 10) })
-      setResponseFile(null)
-      if (fileInput.current) fileInput.current.value = ''
-      setLoadError('')
-    } catch (error) { setLoadError(error.message) } finally { setBusy(false) }
-  }
-  const addAttachments = async (event) => {
-    const files = Array.from(event.target.files || [])
-    if (!files.length) return
-    setAttachmentBusy(true); setAttachmentError('')
-    try {
-      for (const file of files) {
-        const body = new FormData()
-        body.append('file', file)
-        const saved = await api(`/receipts/${rfi.id}/attachments`, { method: 'POST', body })
-        setAttachments(current => [...current, saved])
-      }
-    } catch (error) { setAttachmentError(error.message) }
-    finally { setAttachmentBusy(false); if (event.target.value) event.target.value = '' }
-  }
-  const removeAttachment = async (id) => {
-    if (!window.confirm('Remove this supporting file?')) return
-    try {
-      await api(`/receipts/${rfi.id}/attachments/${id}`, { method: 'DELETE' })
-      setAttachments(current => current.filter(item => item.id !== id))
-      setAttachmentError('')
-    } catch (error) { setAttachmentError(error.message) }
-  }
-  const createShareLink = async () => {
-    setShareBusy(true)
-    try {
-      const result = await api(`/receipts/${rfi.id}/share-link`, { method: 'POST' })
-      setShareUrl(`${window.location.origin}/rfi/respond#${result.token}`)
-      setLoadError('')
-    } catch (error) { setLoadError(error.message) } finally { setShareBusy(false) }
-  }
-  const revokeShareLink = async () => {
-    try {
-      await api(`/receipts/${rfi.id}/share-link`, { method: 'DELETE' })
-      setShareUrl('')
-      setLoadError('')
-    } catch (error) { setLoadError(error.message) }
-  }
-  const originalUrl = rfi.web_url || `${API_URL}/receipts/${rfi.id}/file`
-  const isClosed = responses.length > 0 || rfi.status === 'closed' || Boolean(rfi.closed_at)
-  return <Modal wide title={rfi.rfi_number || 'RFI details'} onClose={onClose}><div className="rfi-detail"><header className="rfi-heading"><div><span>REQUEST FOR INFORMATION</span><h3>{rfi.rfi_subject || rfi.vendor || rfi.filename}</h3><p>{job?.name || rfi.link_label || rfi.link_id || 'Project'} · {fmtDate(rfi.incurred_at)}</p></div><strong className={isClosed ? 'status on' : 'status off'} style={{fontSize:'12px',padding:'6px 14px'}}>{isClosed ? '✓ Closed (Answered)' : 'Open (Awaiting response)'}</strong></header><dl className="rfi-fields"><div><dt>RFI number</dt><dd>{rfi.rfi_number || 'Not recorded'}</dd></div><div><dt>Status</dt><dd><span className={`status ${isClosed ? 'on' : 'off'}`}>{isClosed ? 'Closed' : 'Open'}</span></dd></div><div><dt>Response required by</dt><dd>{rfi.rfi_due_at ? fmtDate(rfi.rfi_due_at) : 'Not set'}</dd></div><div><dt>Job</dt><dd>{job?.code || rfi.link_id}</dd></div></dl><section className="rfi-recipient"><div><h4>To</h4><p>{rfi.rfi_to || 'Not recorded'}</p></div><div><h4>Attention</h4><p>{rfi.rfi_attention_name || 'Not recorded'}</p>{rfi.rfi_attention_phone && <p>{rfi.rfi_attention_phone}</p>}{rfi.rfi_attention_email && <p><a href={`mailto:${rfi.rfi_attention_email}`}>{rfi.rfi_attention_email}</a></p>}</div></section><section className="rfi-question"><h4>Information requested</h4><p>{rfi.rfi_question || rfi.ocr_text || 'No question text captured. Open the original RFI below.'}</p></section>{(rfi.web_url || rfi.mime_type) && <section className="rfi-original"><h4>Original RFI</h4>{rfi.web_url ? <p>Stored in Google Drive. Open the original file below.</p> : previewError ? <p>Preview unavailable. Open the original file below.</p> : rfi.mime_type?.startsWith('image/') ? <img src={originalUrl} alt={`Preview of ${rfi.filename}`} onError={() => setPreviewError(true)}/> : rfi.mime_type === 'application/pdf' ? <iframe title="Original RFI" src={originalUrl}/> : null}<a href={originalUrl} target="_blank" rel="noreferrer">Open original file</a></section>}<section className="rfi-attachments"><h4>Supporting images and PDFs</h4>{attachmentError && <p className="rfi-error">{attachmentError}</p>}{attachments.length ? <div className="rfi-attachment-grid">{attachments.map(item => { const url = item.web_url || `${API_URL}/receipts/${rfi.id}/attachments/${item.id}/file`; return <article key={item.id}>{item.mime_type?.startsWith('image/') && !item.web_url && <a href={url} target="_blank" rel="noreferrer"><img src={url} alt={item.filename}/></a>}<a href={url} target="_blank" rel="noreferrer">{item.filename}</a>{can('RECEIPTS_UPDATE') && <button type="button" className="button secondary" onClick={() => removeAttachment(item.id)}>Remove</button>}</article> })}</div> : <p>No supporting files added yet.</p>}{can('RECEIPTS_UPDATE') && <div style={{marginTop:'10px'}}><DropZone compact multiple icon="📎" title="Drop supporting files here to add" subtitle={attachmentBusy ? "Uploading attachments..." : "Select or drop multiple files (PDF/images)"} onFilesSelected={files => addAttachments({ target: { files } })}/></div>}</section>{can('RECEIPTS_UPDATE') && <section className="rfi-sharing"><h4>External response link</h4><p>Anyone with this link can view this RFI and submit a response without signing in. The link expires in 30 days.</p><button type="button" className="button secondary" disabled={shareBusy} onClick={createShareLink}>{shareBusy ? 'Creating...' : 'Create new link'}</button>{shareUrl && <><label>Share this link<input name="rfi_share_url" readOnly value={shareUrl} onFocus={e => e.target.select()}/></label><div className="rfi-share-actions"><button type="button" className="button secondary" onClick={() => navigator.clipboard.writeText(shareUrl).catch(() => setLoadError('Select and copy the link above.'))}>Copy link</button><button type="button" className="button secondary" onClick={revokeShareLink}>Revoke link</button></div></>}</section>}<section className="rfi-answers"><h4>Responses</h4>{loadError && <p className="rfi-error">{loadError}</p>}{responses.length ? responses.map(item => <article key={item.id}><header><strong>{item.responder_name}</strong><time>{fmtDate(item.responded_at)}</time></header>{item.response_text && <p>{item.response_text}</p>}{item.filename && <a href={item.web_url || `${API_URL}/receipts/${rfi.id}/responses/${item.id}/file`} target="_blank" rel="noreferrer">View response file: {item.filename}</a>}</article>) : <p>No response has been added yet.</p>}</section>{can('RECEIPTS_UPDATE') && <form className="rfi-response-form" onSubmit={submit}><h4>Add a response</h4><label>Answered by<input name="responder_name" required maxLength="200" value={answer.responder_name} onChange={e => setAnswer({...answer, responder_name: e.target.value})} placeholder="Name or company"/></label><label>Response date<input name="responded_at" required type="date" value={answer.responded_at} onChange={e => setAnswer({...answer, responded_at: e.target.value})}/></label><label>Answer<textarea name="response_text" rows="5" maxLength="10000" required={!responseFile} value={answer.response_text} onChange={e => setAnswer({...answer, response_text: e.target.value})} placeholder="Provide the clarification or decision"/></label><label>Response file (optional)<DropZone compact multiple={false} currentFileName={responseFile?.name} title="Drop response file here or browse" subtitle="Supports PDF and images" onFilesSelected={files => setResponseFile(files[0] || null)}/></label><button className="button" disabled={busy}>{busy ? 'Saving...' : 'Add response'}</button></form>}</div></Modal>
-}
-
-function DocumentsView({ type, items, jobs, can, onUpload, onReceiptFiles, onOpenJob, onDelete }) {
-  const shown = items.filter(item => item.document_type === type)
-  const pending = jobs.filter(job => job.documentType === type)
-  const waitingRfis = type === 'rfi' ? shown.filter(item => item.status !== 'closed' && !item.closed_at && (!item.responses || item.responses.length === 0)) : []
-  const closedRfis = type === 'rfi' ? shown.filter(item => item.status === 'closed' || item.closed_at || (item.responses && item.responses.length > 0)) : []
-
-  return <section><div className="section-head"><div><h2>{type === 'rfi' ? 'Requests for information' : 'Receipts & transactions'}</h2><p>{type === 'rfi' ? `${waitingRfis.length} waiting for reply · ${closedRfis.length} closed (${shown.length} total)` : 'Upload, categorize, and track every business receipt.'}</p></div>{can('RECEIPTS_CREATE') && (type === 'receipt' ? <button type="button" className="button upload-top" onClick={() => onUpload()}>+ Upload receipt</button> : <button type="button" className="button upload-top" onClick={onUpload}>+ New RFI</button>)}</div>{can('RECEIPTS_CREATE') && <DropZone multiple icon={type === 'rfi' ? '📋' : '＋'} title={type === 'rfi' ? 'Tap or drop RFI documents & screenshots here' : 'Tap to scan or drop receipts here'} subtitle={type === 'rfi' ? 'Select or drop up to 20 files to upload · Mobile camera & PDF supported' : 'Select or drop up to 20 files · OCR runs in the background'} onFilesSelected={onReceiptFiles}/>}{pending.length > 0 && <details className="job-previews-details ocr-details-toggle" open style={{ marginTop: '16px', marginBottom: '16px' }}><summary className="ocr-toggle-summary" style={{ padding: '10px 14px', background: type === 'rfi' ? '#fffdf5' : '#f0fdf4', border: `1px solid ${type === 'rfi' ? '#fde68a' : '#bbf7d0'}`, borderRadius: '8px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><span style={{ fontWeight: 600, color: type === 'rfi' ? '#92400e' : '#166534', display: 'flex', alignItems: 'center', gap: '8px' }}><span>{type === 'rfi' ? '📋' : '🧾'}</span> {type === 'rfi' ? 'Document' : 'Receipt'} previews ({pending.length})</span><small className="ocr-toggle-badge" style={{ background: type === 'rfi' ? '#fef3c7' : '#dcfce7', color: type === 'rfi' ? '#b45309' : '#15803d' }}>{pending.some(j => ['queued', 'processing'].includes(j.status)) ? 'Processing…' : 'Tap to collapse / expand'}</small></summary><div style={{ marginTop: '12px' }}>{pending.map(job => <div className={`background-job ${job.status}`} key={job.job_id}><div className={['queued','processing'].includes(job.status) ? 'spinner small' : 'job-ready'}>{job.status === 'completed' ? '✓' : job.status === 'failed' ? '!' : ''}</div><div><strong>{job.filename}</strong><span>{job.status === 'completed' ? 'OCR preview is ready' : job.status === 'failed' ? (job.error || 'OCR failed—manual review is available') : `Processing ${type === 'rfi' ? 'document' : 'receipt'} in the background…`}</span></div>{['completed','failed'].includes(job.status) && <button className="button secondary" onClick={() => onOpenJob(job)}>Open preview</button>}</div>)}</div></details>}
-  {type === 'rfi' && (
-    <>
-      <div className="rfi-waiting-section">
-        <div className="rfi-waiting-header">
-          <h3 className="rfi-waiting-title"><span>⏳</span> Waiting for reply ({waitingRfis.length})</h3>
-          {waitingRfis.length > 0 && <span className="status off" style={{ fontSize: '11px' }}>Action required</span>}
-        </div>
-        {waitingRfis.length > 0 ? (
-          <div className="document-grid">
-            {waitingRfis.map(item => (
-              <article className="document-card rfi-waiting-card" key={item.id}>
-                <div className="file-icon">?</div>
-                <div className="doc-main">
-                  <div className="doc-title"><h3>{item.rfi_number ? `${item.rfi_number} · ${item.rfi_subject || item.filename}` : (item.rfi_subject || item.vendor || item.link_label || item.filename)}</h3><span className="status off" style={{ whiteSpace: 'nowrap', fontSize: '10px' }}>Waiting for reply</span></div>
-                  <p>{item.filename}</p>
-                  <div className="doc-meta">
-                    {item.rfi_due_at && <span className="rfi-due-badge">Due: {fmtDate(item.rfi_due_at)}</span>}
-                    <span>{fmtDate(item.incurred_at || item.created_at)}</span>
-                    {item.link_id && <span className="linked">{item.link_type}: {item.link_id}</span>}
-                  </div>
-                </div>
-                {item.web_url && <a className="open-file" href={item.web_url} target="_blank" rel="noreferrer">Open ↗</a>}
-                {can('RECEIPTS_DELETE') && <button className="delete-file" onClick={() => onDelete(item)}>×</button>}
-              </article>
-            ))}
-          </div>
-        ) : (
-          <div style={{ padding: '14px', background: '#ffffff', borderRadius: '8px', border: '1px dashed #fcd34d', textAlign: 'center', color: '#78350f', fontSize: '13px' }}>
-            ✓ All RFIs have received a reply. None currently waiting.
-          </div>
-        )}
-      </div>
-
-      {closedRfis.length > 0 && (
-        <div className="rfi-closed-section">
-          <h3 style={{ fontSize: '15px', fontWeight: 600, margin: '0 0 12px 0', color: '#1f2937', display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <span>✓</span> Closed & answered ({closedRfis.length})
-          </h3>
-          <div className="document-grid">
-            {closedRfis.map(item => (
-              <article className="document-card" key={item.id} style={{ opacity: 0.9 }}>
-                <div className="file-icon">?</div>
-                <div className="doc-main">
-                  <div className="doc-title"><h3>{item.rfi_number ? `${item.rfi_number} · ${item.rfi_subject || item.filename}` : (item.rfi_subject || item.vendor || item.link_label || item.filename)}</h3><span className="status on" style={{ whiteSpace: 'nowrap', fontSize: '10px' }}>Closed</span></div>
-                  <p>{item.filename}</p>
-                  <div className="doc-meta">
-                    <span>Answered: {fmtDate(item.closed_at || item.created_at)}</span>
-                    {item.link_id && <span className="linked">{item.link_type}: {item.link_id}</span>}
-                  </div>
-                </div>
-                {item.web_url && <a className="open-file" href={item.web_url} target="_blank" rel="noreferrer">Open ↗</a>}
-                {can('RECEIPTS_DELETE') && <button className="delete-file" onClick={() => onDelete(item)}>×</button>}
-              </article>
-            ))}
-          </div>
-        </div>
-      )}
-      {!shown.length && !pending.length && <Empty text="No RFI screenshots uploaded yet."/>}
-    </>
-  )}
-  {type !== 'rfi' && (
-    <div className="document-grid">{shown.map(item => <article className="document-card" key={item.id}><div className="file-icon">▧</div><div className="doc-main"><div className="doc-title"><h3>{item.vendor || item.link_label || item.filename}</h3>{item.amount != null && <strong className={item.transaction_type === 'income' ? 'income' : ''}>{item.transaction_type === 'income' ? '+' : '−'}{money(item.amount, item.currency)}</strong>}</div><p>{item.filename}</p><div className="doc-meta"><span>{categoryLabel(item.category)}</span><span>{fmtDate(item.incurred_at)}</span><span>{item.storage_provider === 'google_drive' ? 'Google Drive' : 'Local storage'}</span>{item.link_id && <span className="linked">{item.link_type}: {item.link_id}</span>}</div>{item.ocr_text && <details><summary>OCR text</summary><pre>{item.ocr_text}</pre></details>}</div>{item.web_url && <a className="open-file" href={item.web_url} target="_blank" rel="noreferrer">Open ↗</a>}{can('RECEIPTS_DELETE') && <button className="delete-file" onClick={() => onDelete(item)}>×</button>}</article>)}{!shown.length && !pending.length && <Empty text="No receipts uploaded yet."/>}</div>
-  )}
-  {can('RECEIPTS_CREATE') && (type === 'receipt' ? <button type="button" className="mobile-fab" onClick={() => onUpload()}><span>＋</span>Add receipts</button> : <button type="button" className="mobile-fab" onClick={onUpload}><span>＋</span>New RFI</button>)}</section>
+  return <section><div className="section-head"><div><h2>Jobs</h2><p>Keep receipts, quotes, and drawings together.</p></div></div><div className="job-selector panel"><label htmlFor="job-search">Search jobs</label><div className="job-search-wrap" onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) setSearchOpen(false) }}><input id="job-search" type="search" role="combobox" aria-autocomplete="list" aria-expanded={searchOpen} aria-controls="job-suggestions" aria-activedescendant={searchOpen && suggestions.length ? `job-option-${suggestions[activeSuggestion]?.id}` : undefined} autoComplete="off" value={jobSearch} onFocus={() => setSearchOpen(true)} onChange={event => { setJobSearch(event.target.value); setActiveSuggestion(0); setSearchOpen(true) }} onKeyDown={onSearchKeyDown} placeholder="Search by job or code, or create a job"/>{searchOpen && <div id="job-suggestions" className="job-suggestions" role="listbox">{suggestions.map((job, index) => <button type="button" role="option" aria-selected={index === activeSuggestion} id={`job-option-${job.id}`} key={job.id} className={index === activeSuggestion ? 'active' : ''} onMouseEnter={() => setActiveSuggestion(index)} onClick={() => selectJob(job)}><strong>{job.code} · {job.name}</strong><span>{job.company || 'Company not set'}</span></button>)}{!suggestions.length && <p>No jobs match your search.</p>}{shouldSuggestCreate && <button type="button" className="job-create-suggestion" onClick={openCreateForCompany}><strong>+ Create job for {jobSearch.trim()}</strong><span>Company will be filled in for you</span></button>}{matchingJobs.length > suggestions.length && <small>Keep typing to narrow {matchingJobs.length} matches.</small>}</div>}</div><div className="job-search-footer"><small>{selected ? `Selected: ${selected.code} · ${selected.name}` : `${jobs.length} jobs available`}</small>{can('JOBS_CREATE') && <button type="button" className="button secondary" onClick={openCreateForCompany}>+ Create job</button>}</div></div>{can('JOBS_CREATE') && <details className="job-create panel" ref={createPanel}><summary>+ Create job</summary><form className="form" onSubmit={create}><div className="form-row"><label>Job code<input name="code" required maxLength="80" value={form.code} onChange={event => setForm({...form, code: event.target.value})} placeholder="JOB-1042"/></label><label>Job name<input name="name" required maxLength="200" value={form.name} onChange={event => setForm({...form, name: event.target.value})} placeholder="Project name"/></label></div><label>Company<input name="company" maxLength="200" value={form.company} onChange={event => setForm({...form, company: event.target.value})} placeholder="Client or company name"/></label><label>Description<input name="description" maxLength="2000" value={form.description} onChange={event => setForm({...form, description: event.target.value})}/></label><button className="button" disabled={busy}>{busy ? 'Creating...' : '+ Create job'}</button></form></details>}{!jobs.length && <Empty text="No jobs yet. Create one to attach its documents."/>}{selected && <div className="job-details" ref={jobDetailsRef}><h2>{selected.code}: {selected.name}</h2>{can('JOBS_UPDATE') ? <form className="job-company-editor" onSubmit={saveCompany}><label>Company<input name="company" maxLength="200" value={companyDraft} onChange={event => setCompanyDraft(event.target.value)} placeholder="Add company name"/></label><button type="submit" className="button secondary" disabled={companySaving || companyDraft.trim() === (selected.company || '')}>{companySaving ? 'Saving...' : 'Save company'}</button></form> : <p className="job-company-label">{selected.company || 'Company not set'}</p>}<div className="job-tabs" role="tablist" aria-label="Job documents">{JOB_SECTIONS.filter(([key]) => key !== 'gas').map(([key,label]) => <button type="button" role="tab" aria-selected={jobSection === key || (key === 'receipts' && jobSection === 'gas')} className={jobSection === key || (key === 'receipts' && jobSection === 'gas') ? 'active' : ''} key={key} onClick={() => setJobSection(key)}>{label}{key !== 'budget' && <span>{detail?.[key]?.length || 0}</span>}</button>)}</div><div role="tabpanel">{jobSection === 'budget' && <JobBudget job={selected} summary={detail?.budget} canEdit={can('JOBS_UPDATE')} onSave={saveBudget}/>} {jobSection === 'quotes' && section('Quotes', 'quotes', 'quote')}{jobSection === 'receipts' && section('Receipts', 'receipts')}{jobSection === 'gas' && <GasVehicles vehicles={vehicles} receipts={(allReceipts || []).filter(item => item.category === 'gas' && item.vehicle_id)} canCreate={can('RECEIPTS_CREATE')} canDelete={can('RECEIPTS_DELETE')} onRefresh={() => onRefresh()} onAddReceipt={() => onUploadDocument(selected, 'gas-receipt')}/>}{jobSection === 'drawings' && section('Drawings', 'drawings', 'drawing')}</div></div>}{quoteEditor && selected && <QuoteForm job={selected} quote={quoteEditor.id ? quoteEditor : null} receipts={detail?.receipts || []} onSave={saveQuote} onClose={() => setQuoteEditor(null)}/>}
+        {selectedDocument && <Modal title="Receipt details" onClose={() => setSelectedDocument(null)}><div className="receipt-info"><h3>{selectedDocument.vendor || selectedDocument.filename}</h3><details className="ocr-details-toggle" open style={{ marginBottom: '16px' }}><summary className="ocr-toggle-summary" style={{ padding: '12px 16px', background: '#f4f5fa', border: '1px solid var(--line)', borderRadius: '10px', cursor: 'pointer' }}><span>🔍 View image / document preview</span><small className="ocr-toggle-badge">Tap to collapse / expand</small></summary><div className="receipt-info-preview" style={{ margin: '12px 0 0 0' }}>{selectedDocument.web_url ? <div style={{ padding: '12px', background: '#eff6ff', borderRadius: '8px', border: '1px solid #bfdbfe' }}><p style={{ margin: '0 0 8px 0', color: '#1e40af' }}>Original file is stored in Google Drive.</p><a className="button" href={selectedDocument.web_url} target="_blank" rel="noreferrer">Open in Google Drive ↗</a></div> : documentPreviewUrl ? (selectedDocument.mime_type === 'application/pdf' ? <iframe title="Document preview" src={documentPreviewUrl}/> : <img src={documentPreviewUrl} alt={`Preview of ${selectedDocument.filename}`} onError={() => setDocumentPreviewError(true)}/>) : documentPreviewError ? <p>Preview unavailable. Open the original file below.</p> : <p>Loading preview...</p>}</div></details><dl><div><dt>File</dt><dd>{selectedDocument.filename}</dd></div><div><dt>Receipt date</dt><dd>{fmtDate(selectedDocument.incurred_at)}</dd></div><div><dt>Uploaded</dt><dd>{fmtDate(selectedDocument.created_at)}</dd></div>{selectedDocument.document_type === 'receipt' && <><div><dt>Amount</dt><dd>{selectedDocument.amount == null ? 'Not recorded' : money(selectedDocument.amount, selectedDocument.currency)}</dd></div><div><dt>Type</dt><dd>{selectedDocument.transaction_type || 'Expense'}</dd></div></>}<div><dt>Category</dt><dd>{categoryLabel(selectedDocument.category)}</dd></div><div><dt>Job</dt><dd>{selected?.code || selectedDocument.link_id}</dd></div></dl>{selectedDocument.ocr_text && <details className="ocr-details-toggle" open style={{ marginBottom: '16px' }}><summary className="ocr-toggle-summary" style={{ padding: '12px 16px', background: '#f4f5fa', border: '1px solid var(--line)', borderRadius: '10px', cursor: 'pointer' }}><span>📝 Extracted text</span><small className="ocr-toggle-badge">Tap to collapse</small></summary><pre style={{ margin: '12px 0 0 0' }}>{selectedDocument.ocr_text}</pre></details>}<a className="button" href={selectedDocument.web_url || `${API_URL}/receipts/${selectedDocument.id}/file`} target="_blank" rel="noreferrer">Open original file</a></div></Modal>}</section>
 }
 
 function Reports({ summary, year, setYear, jobs, receipts, jobId, setJobId }) {
