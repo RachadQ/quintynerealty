@@ -64,3 +64,6 @@ In Vercel, set `VITE_API_URL` to the backend HTTPS origin for the relevant Produ
 
 
 The login screen uses the Google Identity Services flow from Devante. The backend verifies the credential and requires an existing active user account. Microsoft sign-in is used for connecting OneDrive storage only. Set `GOOGLE_OAUTH_CLIENT_ID` in the backend Vercel project and authorize the frontend origin in Google Cloud. Use secure SameSite=None cookies for the separate Vercel frontend/API hosts; CSRF tokens are returned by the backend rather than read from another origin's cookies.
+
+
+Google popup sign-in uses `Cross-Origin-Opener-Policy: same-origin-allow-popups` and `Referrer-Policy: strict-origin-when-cross-origin`. Vercel headers are configured explicitly in `vercel.json`; the `_headers` file covers hosts that support that format and permits Google Identity Services scripts, styles, and frames. Vite development and preview use the same popup policy. Redeploy the frontend for header changes to take effect. Popup policy warnings alone do not confirm a login failure: verify POST `/auth/google` and the following bootstrap request.

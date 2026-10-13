@@ -9,7 +9,8 @@ export default defineConfig({
     headers: {
       'X-Content-Type-Options': 'nosniff',
       'X-Frame-Options': 'DENY',
-      'Referrer-Policy': 'no-referrer',
+      'Referrer-Policy': 'strict-origin-when-cross-origin',
+      'Cross-Origin-Opener-Policy': 'same-origin-allow-popups',
       'Permissions-Policy': 'camera=(self), microphone=(), geolocation=()',
     },
   },
@@ -17,7 +18,8 @@ export default defineConfig({
     headers: {
       'X-Content-Type-Options': 'nosniff',
       'X-Frame-Options': 'DENY',
-      'Referrer-Policy': 'no-referrer',
+      'Referrer-Policy': 'strict-origin-when-cross-origin',
+      'Cross-Origin-Opener-Policy': 'same-origin-allow-popups',
     },
   },
 })

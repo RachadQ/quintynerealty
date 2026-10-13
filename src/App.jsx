@@ -554,7 +554,7 @@ export default function App() {
 
   const can = useCallback((permission) => session?.permissions?.includes('*') || session?.permissions?.includes(permission), [session])
   const load = useCallback(async (silent = false) => {
-    if (silent !== true) setLoading(true)
+    if (silent !== true) { setLoading(true); setNotice(null) }
     try {
       const bootstrap = validateSession(await api('/auth/bootstrap'))
       setSession(bootstrap)
