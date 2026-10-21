@@ -303,6 +303,13 @@ function UploadForm({ type, onSave, onClose, onJobQueued, backgroundJob, vehicle
     fuel_litres: restored.suggested_fuel_litres || restored.suggested_litres || '',
     ocr_text_override: restored.ocr_text || '',
   })
+  const reviewItems = result => [...(result.line_items || []), ...(result.receipt_tax_amount > 0 ? [{ description: 'Taxes (adjust to business portion)', amount: result.receipt_tax_amount, included: true }] : [])]
+  const [lineItems, setLineItems] = useState(() => reviewItems(restored))
+  const [receiptTotal, setReceiptTotal] = useState(restored.suggested_amount ?? '')
+  const [itemMessage, setItemMessage] = useState(restored.item_review_message || '')
+  const [itemsReviewed, setItemsReviewed] = useState(false)
+  const businessTotal = (lineItems.reduce((sum, item) => sum + (item.included ? Math.round(Number(item.amount || 0) * 100) : 0), 0) / 100).toFixed(2)
+  const updateItem = (index, change) => { setLineItems(items => items.map((item, i) => i === index ? { ...item, ...change } : item)); setItemsReviewed(false) }
   const [file, setFile] = useState(backgroundJob?.file || null)
   const [busy, setBusy] = useState(false)
   const [previewing, setPreviewing] = useState(['queued', 'processing'].includes(backgroundJob?.status))
@@ -363,6 +370,10 @@ function UploadForm({ type, onSave, onClose, onJobQueued, backgroundJob, vehicle
 
     const requestId = ++previewRequest.current
     setPreviewImageFailed(false)
+    setLineItems([])
+    setItemsReviewed(false)
+    setReceiptTotal('')
+    setItemMessage('')
     setFile(primaryFile)
     setPreviewUrl('')
     setPreviewing(true)
@@ -387,6 +398,9 @@ function UploadForm({ type, onSave, onClose, onJobQueued, backgroundJob, vehicle
       if (['queued', 'processing'].includes(job.status)) throw new Error('OCR preview timed out.')
       if (job.status === 'failed') throw new Error(job.error || 'OCR preview failed')
       const result = job.preview || {}
+      setLineItems(reviewItems(result))
+      setReceiptTotal(result.suggested_amount ?? '')
+      setItemMessage(result.item_review_message || '')
       const extractedLitres = result.suggested_fuel_litres || result.suggested_litres || ''
       const isGas = forceGas || result.suggested_category === 'gas'
 
@@ -430,6 +444,11 @@ function UploadForm({ type, onSave, onClose, onJobQueued, backgroundJob, vehicle
     setBusy(true)
     const data = new FormData()
     Object.entries(form).forEach(([key, value]) => (value !== '' || key === 'ocr_text_override') && data.append(key, value))
+    if (lineItems.length) {
+      data.set('line_items', JSON.stringify(lineItems.map(item => ({ ...item, amount: Number(item.amount) }))))
+      data.set('amount', businessTotal)
+    }
+    if (receiptTotal !== '') data.set('receipt_total', receiptTotal)
     if (file) data.append('file', file)
     try {
       await onSave(data, backgroundJob?.job_id)
@@ -484,6 +503,18 @@ function UploadForm({ type, onSave, onClose, onJobQueued, backgroundJob, vehicle
       </details>
     )}
 
+    <section className="receipt-item-review"><h3>Review purchased items</h3>
+      <p>{itemMessage || 'Add any missing items manually.'} Uncheck personal purchases. Amounts are line totals; include tax and negative discounts separately.</p>
+      {lineItems.map((item, index) => <div className="receipt-item-row" key={index}>
+        <label className="receipt-item-check"><input type="checkbox" checked={item.included} onChange={e => updateItem(index, { included: e.target.checked })}/>Business</label>
+        <label>Description<input required value={item.description} maxLength={300} onChange={e => updateItem(index, { description: e.target.value })}/></label>
+        <label>Line amount<input required type="number" step="0.01" value={item.amount} onChange={e => updateItem(index, { amount: e.target.value })}/></label>
+        <button type="button" className="button secondary" onClick={() => { setLineItems(items => items.filter((_, i) => i !== index)); setItemsReviewed(false) }}>Remove</button>
+      </div>)}
+      <button type="button" className="button secondary" onClick={() => { setLineItems(items => [...items, { description: '', amount: '', included: true }]); setItemsReviewed(false) }}>Add item / tax / discount</button>
+      <label>Original receipt total<input type="number" min="0" step="0.01" value={receiptTotal} onChange={e => setReceiptTotal(e.target.value)}/></label>
+      {lineItems.length > 0 && <><p>All extracted lines: {(lineItems.reduce((sum, item) => sum + Math.round(Number(item.amount || 0) * 100), 0) / 100).toFixed(2)} {form.currency}. Compare with the original receipt total.</p><p><strong>Business amount to save: {businessTotal} {form.currency}</strong></p><p>Adjust the tax row to the business portion when excluding personal purchases. Enter only business HST below.</p><label className="receipt-item-check"><input required type="checkbox" checked={itemsReviewed} onChange={e => setItemsReviewed(e.target.checked)}/>I checked all items, discounts and business tax against the original.</label></>}
+    </section>
     <label>Business / industry type<select name="business_activity" value={form.business_activity} onChange={e => setForm({ ...form, business_activity: e.target.value })}>{BUSINESS_ACTIVITIES.map(([id, label]) => <option key={id} value={id}>{label}</option>)}</select></label>
 
     <div className="form-row">
@@ -508,10 +539,10 @@ function UploadForm({ type, onSave, onClose, onJobQueued, backgroundJob, vehicle
           <label>Record as<select name="transaction_type" value={form.transaction_type} onChange={e => setForm({ ...form, transaction_type: e.target.value })}><option value="expense">Expense</option><option value="income">Income</option></select></label>
           <label>
             Amount {detectedFields.amount && <span style={{ color: '#21a977', fontWeight: 'normal', fontSize: '10px' }}>(✨ Auto-detected)</span>}
-            <input name="amount" min="0" step="0.01" type="number" placeholder="0.00" value={form.amount} onChange={e => setForm({ ...form, amount: e.target.value })}/>
+            <input name="amount" min="0" step="0.01" type="number" placeholder="0.00" value={lineItems.length ? businessTotal : form.amount} readOnly={lineItems.length > 0} onChange={e => setForm({ ...form, amount: e.target.value })}/>
           </label>
         </div>
-        <label>HST amount (included in total) {detectedFields.hst_amount != null && <small>Detected from receipt?please review</small>}<input name="hst_amount" type="number" min="0" max={form.amount === '' ? undefined : form.amount} step="0.01" value={form.hst_amount} onChange={e => setForm({ ...form, hst_amount: e.target.value })} placeholder="Not recorded"/><small>Enter the HST shown on the receipt, or 0 if none was charged. Leave blank if unknown.</small></label>
+        <label>HST amount (included in total) {detectedFields.hst_amount != null && <small>Detected from receipt?please review</small>}<input name="hst_amount" type="number" min="0" max={lineItems.length ? businessTotal : form.amount === '' ? undefined : form.amount} step="0.01" value={form.hst_amount} onChange={e => setForm({ ...form, hst_amount: e.target.value })} placeholder="Not recorded"/><small>Enter the HST shown on the receipt, or 0 if none was charged. Leave blank if unknown.</small></label>
         <label>
           Vendor {detectedFields.vendor && <span style={{ color: '#21a977', fontWeight: 'normal', fontSize: '10px' }}>(✨ Auto-detected)</span>}
           <input name="vendor" value={form.vendor} placeholder="e.g. Petro-Canada" onChange={e => setForm({ ...form, vendor: e.target.value })}/>
@@ -525,7 +556,7 @@ function UploadForm({ type, onSave, onClose, onJobQueued, backgroundJob, vehicle
 
     <footer>
       <button type="button" className="button secondary" onClick={onClose}>Cancel</button>
-      <button className="button" disabled={busy || previewing || !hasUpload}>
+      <button className="button" disabled={busy || previewing || !hasUpload || (lineItems.length > 0 && !itemsReviewed)}>
         {busy ? 'Uploading…' : previewing ? 'Reading…' : `Confirm & upload ${'receipt'}`}
       </button>
     </footer>
