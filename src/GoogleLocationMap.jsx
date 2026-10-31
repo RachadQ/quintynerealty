@@ -54,5 +54,12 @@ export default function GoogleLocationMap({ machines, selected, onSelect, onPick
     if (marker && map.current) { map.current.setCenter(marker.position); map.current.setZoom(16) }
   }, [selected, machines, ready])
   if (!googleMapsConfigured) return <div className="vending-map-setup" role="status">Google Maps will be available after the Google Maps API key is configured. Saved machine addresses are still available.</div>
-  return <div className="vending-map-wrap"><div ref={element} className="vending-map" role="region" aria-label="Google map of vending machine locations"/>{!ready && !error && <p role="status">Loading Google Maps...</p>}{error && <p role="alert">{error}</p>}</div>
+  const showWorld = () => {
+    if (!map.current) return
+    popup.current?.close()
+    callbacks.current.onSelect?.(null)
+    map.current.setCenter({ lat: 0, lng: 0 })
+    map.current.setZoom(1)
+  }
+  return <div className="vending-map-wrap"><div className="vending-map-actions"><button type="button" className="button secondary" disabled={!ready || Boolean(error)} onClick={showWorld}>World view</button></div><div ref={element} className="vending-map" role="region" aria-label="Google map of vending machine locations"/>{!ready && !error && <p role="status">Loading Google Maps...</p>}{error && <p role="alert">{error}</p>}</div>
 }
