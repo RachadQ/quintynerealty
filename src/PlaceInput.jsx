@@ -5,8 +5,10 @@ const placeSuggestionCache = new Map()
 
 export default function PlaceInput({ label, value, onChange, placeholder, required = false, maxLength = 300, endpoint = "/vehicles/place-suggestions" }) {
   const inputId = useId()
+  const numberedAddress = value.trim().match(/^(\d+[A-Za-z]?(?:-\d+[A-Za-z]?)?)\s+/)?.[1]
   const selectedAddress = useRef('')
   const [suggestions, setSuggestions] = useState([])
+  const matchingSuggestions = suggestions.filter(item => !numberedAddress || item.label.toLowerCase().startsWith(`${numberedAddress.toLowerCase()} `))
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
   useEffect(() => {
@@ -27,6 +29,6 @@ export default function PlaceInput({ label, value, onChange, placeholder, requir
     }, 250)
     return () => { clearTimeout(timer); controller.abort() }
   }, [value, endpoint])
-  return <label className="place-field">{label}<input id={inputId} autoComplete="off" required={required} maxLength={maxLength} value={value} onFocus={() => value.trim().length >= 6 && setOpen(true)} onBlur={() => setTimeout(() => setOpen(false), 120)} onChange={e => onChange(e.target.value)} placeholder={placeholder}/>{open && <div className="place-suggestions" role="listbox"><button type="button" role="option" className="use-entered-address" onMouseDown={e => e.preventDefault()} onClick={() => setOpen(false)}><strong>Use entered address</strong><span>{value.trim()}</span></button>{loading && <p className="place-search-status">Searching Canadian addresses…</p>}{!loading && suggestions.length === 0 && <p className="place-search-status">No matching suggestions. You can use the address exactly as entered.</p>}{suggestions.filter(item => item.label.toLowerCase() !== value.trim().toLowerCase()).map((item,index) => <button type="button" role="option" key={`${item.longitude}-${item.latitude}-${index}`} onMouseDown={e => e.preventDefault()} onClick={() => { selectedAddress.current = item.label; onChange(item.label); setOpen(false) }}>{item.label}</button>)}</div>}</label>
+  return <label className="place-field">{label}<input id={inputId} autoComplete="off" required={required} maxLength={maxLength} value={value} onFocus={() => value.trim().length >= 6 && setOpen(true)} onBlur={() => setTimeout(() => setOpen(false), 120)} onChange={e => onChange(e.target.value)} placeholder={placeholder}/>{open && <div className="place-suggestions" role="listbox"><button type="button" role="option" className="use-entered-address" onMouseDown={e => e.preventDefault()} onClick={() => setOpen(false)}><strong>Use entered address</strong><span>{value.trim()}</span></button>{loading && <p className="place-search-status">Searching Canadian addresses…</p>}{!loading && matchingSuggestions.length === 0 && <p className="place-search-status">No exact address match. Keep the street number and add the city and province.</p>}{matchingSuggestions.filter(item => item.label.toLowerCase() !== value.trim().toLowerCase()).map((item,index) => <button type="button" role="option" key={`${item.longitude}-${item.latitude}-${index}`} onMouseDown={e => e.preventDefault()} onClick={() => { selectedAddress.current = item.label; onChange(item.label); setOpen(false) }}>{item.label}</button>)}</div>}</label>
 }
 
