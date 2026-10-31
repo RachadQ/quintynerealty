@@ -67,3 +67,24 @@ The login screen uses the Google Identity Services flow from Devante. The backen
 
 
 Google popup sign-in uses `Cross-Origin-Opener-Policy: same-origin-allow-popups` and `Referrer-Policy: strict-origin-when-cross-origin`. Vercel headers are configured explicitly in `vercel.json`; the `_headers` file covers hosts that support that format and permits Google Identity Services scripts, styles, and frames. Vite development and preview use the same popup policy. Redeploy the frontend for header changes to take effect. Popup policy warnings alone do not confirm a login failure: verify POST `/auth/google` and the following bootstrap request.
+
+
+### Google Maps and address autocomplete
+
+Create a Google Maps Platform project with billing, and enable Maps JavaScript
+API, Places API (New), and Geocoding API. Create a browser API key restricted to
+those APIs and your website referrers (including http://127.0.0.1:5174/* for local
+use). Set GOOGLE_MAPS_API_KEY in the frontend .env and deployment environment,
+then rebuild. This is a browser-visible key; never use an unrestricted server key.
+Optionally set VITE_GOOGLE_MAPS_MAP_ID to a production JavaScript map ID; the
+Google demo map ID supports initial setup.
+
+Vending maps and manual pin placement use Google Maps. Shared address inputs
+use Places Autocomplete (New) sessions and retrieve formatted address and location
+on selection. Street numbers and postal codes are retained. An unselected address
+is geocoded through Google in the browser when saving; failed lookup still permits
+saving the entered address without a fabricated pin. No backend Maps key is needed.
+Without the key, a map setup notice appears and existing address lookup remains
+available. A live Google verification requires a configured key and enabled billing.
+Setup: https://developers.google.com/maps/get-started
+Keys: https://console.cloud.google.com/apis/credentials
