@@ -76,15 +76,12 @@ API, Places API (New), and Geocoding API. Create a browser API key restricted to
 those APIs and your website referrers (including http://127.0.0.1:5174/* for local
 use). Set GOOGLE_MAPS_API_KEY in the frontend .env and deployment environment,
 then rebuild. This is a browser-visible key; never use an unrestricted server key.
-Optionally set VITE_GOOGLE_MAPS_MAP_ID to a production JavaScript map ID; the
-Google demo map ID supports initial setup.
 
-Vending maps and manual pin placement use Google Maps. Shared address inputs
+Vending maps and manual pin placement use Leaflet with OpenStreetMap streets and Esri satellite/dark layers, matching the real estate location explorer. The world map, saved machine pins, machine details, and map style controls work without a Google key. Shared address inputs
 use Places Autocomplete (New) sessions and retrieve formatted address and location
 on selection. Street numbers and postal codes are retained. An unselected address
 is geocoded through Google in the browser when saving; failed lookup still permits
 saving the entered address without a fabricated pin. No backend Maps key is needed.
-Without the key, a map setup notice appears and existing address lookup remains
-available. A live Google verification requires a configured key and enabled billing.
+Without the key, address search uses the existing backend lookup; the world map and saved pins remain available. A live Google verification requires a configured key and enabled billing.
 Setup: https://developers.google.com/maps/get-started
 Keys: https://console.cloud.google.com/apis/credentials

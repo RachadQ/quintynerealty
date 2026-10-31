@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import LocationMap from './GoogleLocationMap.jsx'
+import LocationMap from './LocationMap.jsx'
 import { geocodeGoogleAddress, googleMapsConfigured } from './googleMaps.js'
 import { api } from './api.js'
 import PlaceInput from './PlaceInput.jsx'
@@ -11,7 +11,8 @@ const hasPoint = machine => Number.isFinite(machine.latitude) && Number.isFinite
 export default function VendingMachines({ can, Modal }) {
   const [machines, setMachines] = useState([])
   const locationMap = useRef(null)
-  const showMachine = id => { setSelected(id); locationMap.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }) }
+  const [focusVersion, setFocusVersion] = useState(0)
+  const showMachine = id => { setSelected(id); setFocusVersion(value => value + 1); locationMap.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }) }
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [query, setQuery] = useState('')
@@ -57,12 +58,14 @@ export default function VendingMachines({ can, Modal }) {
     {success && <p role="status">{success}</p>}
     {error && <p className="rfi-error" role="alert">{error}</p>}
     <div className="vending-toolbar"><label>Find a machine<input type="search" value={query} onChange={e => setQuery(e.target.value)} placeholder="Search name or address"/></label><span role="status">{loading ? 'Loading locations...' : `${visible.length} of ${machines.length} machines`}</span></div>
-    <div ref={locationMap}><LocationMap machines={visible} selected={selected} onSelect={setSelected}/></div>
+    <div className="vending-explorer">
+    <div className="vending-explorer-map" ref={locationMap}><LocationMap machines={visible} selected={selected} focusVersion={focusVersion} onSelect={setSelected}/></div>
+    <div className="vending-directory"><header><strong>Machine locations</strong><span>{visible.filter(hasPoint).length} mapped</span></header><p className="vending-directory-hint">Select a machine to fly to its location.</p>
     {!loading && !visible.length && <p className="empty">{query ? 'No machines match your search.' : 'Add your first machine with its full address to place a pin on the map.'}</p>}
     <div className="vending-library">{visible.map((machine, index) => <article className={`panel vending-card ${selected === machine.id ? 'selected' : ''}`} key={machine.id}>
-      <button type="button" className="vending-destination" onClick={() => showMachine(machine.id)} disabled={!hasPoint(machine)} aria-label={`Show ${machine.name} on the map`}><div className="vending-card-heading"><span className="vending-number">{index + 1}</span><h3>{machine.name}</h3></div><p>{machine.address}</p></button>{!hasPoint(machine) && <p className="vending-pin-needed">Address saved - map pin needed</p>}{machine.notes && <p className="vending-notes">{machine.notes}</p>}
+      <button type="button" className="vending-destination" onClick={() => showMachine(machine.id)} disabled={!hasPoint(machine)} aria-label={`Show ${machine.name} on the map`} aria-pressed={selected === machine.id}><div className="vending-card-heading"><span className="vending-number">{index + 1}</span><h3>{machine.name}</h3></div><p>{machine.address}</p></button>{!hasPoint(machine) && <p className="vending-pin-needed">Address saved - map pin needed</p>}{machine.notes && <p className="vending-notes">{machine.notes}</p>}
       <div className="vending-card-actions"><button className="button secondary" onClick={() => showMachine(machine.id)} disabled={!hasPoint(machine)}>Show pin</button><a className="button secondary" href={machineDirectionsUrl(machine)} target="_blank" rel="noreferrer">Directions</a>{can('RECEIPTS_UPDATE') && <button className="text-button" onClick={() => open(machine)}>Edit</button>}{can('RECEIPTS_DELETE') && <button className="danger-link" disabled={busy} onClick={() => remove(machine)}>Remove</button>}</div>
-    </article>)}</div>
+    </article>)}</div></div></div>
     {editing && <Modal title={editing.id ? 'Edit vending machine' : 'Add vending machine'} onClose={close}><form className="form vending-form" onSubmit={save}>
       <label>Machine name<input required maxLength={120} value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="Lobby snack machine"/></label>
       <PlaceInput label="Full address" required maxLength={200} endpoint="/vending-machines/locations" value={form.address} onChange={address => { setForm(current => ({ ...current, address, latitude: null, longitude: null })); setPlacingPin(false) }} onResolvingChange={setResolvingAddress} onPlaceSelected={point => { setForm(current => ({ ...current, ...point })); setPlacingPin(true) }} placeholder="Start typing a place or address"/>
