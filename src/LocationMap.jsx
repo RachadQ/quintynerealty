@@ -55,7 +55,7 @@ export default function LocationMap({ machines, selected, onSelect, onPick, cent
       if (!hasPoint(item)) return
       const label = document.createElement('span')
       label.className = 'machine-map-label'
-      label.textContent = `${index + 1} · ${item.name}`
+      label.textContent = String(index + 1)
       const icon = L.divIcon({ className: 'machine-map-marker', html: label, iconSize: [44, 44], iconAnchor: [22, 22] })
       const marker = L.marker([item.latitude, item.longitude], { icon, title: item.name, alt: `Show ${item.name}`, keyboard: true }).addTo(map.current)
       marker.getElement()?.setAttribute('aria-label', `Show ${item.name}`)
