@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import LocationMap from './GoogleLocationMap.jsx'
 import { geocodeGoogleAddress, googleMapsConfigured } from './googleMaps.js'
 import { api } from './api.js'
@@ -10,6 +10,8 @@ const hasPoint = machine => Number.isFinite(machine.latitude) && Number.isFinite
 
 export default function VendingMachines({ can, Modal }) {
   const [machines, setMachines] = useState([])
+  const locationMap = useRef(null)
+  const showMachine = id => { setSelected(id); locationMap.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }) }
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [query, setQuery] = useState('')
@@ -19,6 +21,7 @@ export default function VendingMachines({ can, Modal }) {
   const [busy, setBusy] = useState(false)
   const [formError, setFormError] = useState('')
   const [placingPin, setPlacingPin] = useState(false)
+  const [resolvingAddress, setResolvingAddress] = useState(false)
   const [success, setSuccess] = useState('')
   const visible = useMemo(() => machines.filter(machine => `${machine.name} ${machine.address} ${machine.notes}`.toLowerCase().includes(query.toLowerCase())), [machines, query])
   useEffect(() => {
@@ -26,10 +29,10 @@ export default function VendingMachines({ can, Modal }) {
     api('/vending-machines').then(data => { if (active) setMachines(data) }).catch(e => { if (active) setError(e.message) }).finally(() => { if (active) setLoading(false) })
     return () => { active = false }
   }, [])
-  const open = machine => { setEditing(machine || {}); setForm(machine ? { name: machine.name, address: machine.address, notes: machine.notes || '', latitude: machine.latitude ?? null, longitude: machine.longitude ?? null } : blank); setPlacingPin(false); setFormError('') }
-  const close = () => { if (!busy) setEditing(null) }
+  const open = machine => { setEditing(machine || {}); setForm(machine ? { name: machine.name, address: machine.address, notes: machine.notes || '', latitude: machine.latitude ?? null, longitude: machine.longitude ?? null } : blank); setPlacingPin(Boolean(machine && hasPoint(machine))); setResolvingAddress(false); setFormError('') }
+  const close = () => { if (!busy && !resolvingAddress) setEditing(null) }
   const save = async event => {
-    event.preventDefault(); setBusy(true); setFormError('')
+    event.preventDefault(); if (resolvingAddress) return; setBusy(true); setFormError('')
     try {
       let payload = form
       if (googleMapsConfigured && !hasPoint(form)) {
@@ -54,22 +57,22 @@ export default function VendingMachines({ can, Modal }) {
     {success && <p role="status">{success}</p>}
     {error && <p className="rfi-error" role="alert">{error}</p>}
     <div className="vending-toolbar"><label>Find a machine<input type="search" value={query} onChange={e => setQuery(e.target.value)} placeholder="Search name or address"/></label><span role="status">{loading ? 'Loading locations...' : `${visible.length} of ${machines.length} machines`}</span></div>
-    <LocationMap machines={visible} selected={selected} onSelect={setSelected}/>
+    <div ref={locationMap}><LocationMap machines={visible} selected={selected} onSelect={setSelected}/></div>
     {!loading && !visible.length && <p className="empty">{query ? 'No machines match your search.' : 'Add your first machine with its full address to place a pin on the map.'}</p>}
     <div className="vending-library">{visible.map((machine, index) => <article className={`panel vending-card ${selected === machine.id ? 'selected' : ''}`} key={machine.id}>
-      <a className="vending-destination" href={machineDirectionsUrl(machine)} target="_blank" rel="noreferrer" aria-label={`Directions to ${machine.name}, ${machine.address}`}><div className="vending-card-heading"><span className="vending-number">{index + 1}</span><h3>{machine.name}</h3></div><p>{machine.address}</p></a>{!hasPoint(machine) && <p className="vending-pin-needed">Address saved - map pin needed</p>}{machine.notes && <p className="vending-notes">{machine.notes}</p>}
-      <div className="vending-card-actions"><button className="button secondary" onClick={() => setSelected(machine.id)} disabled={!hasPoint(machine)}>Show pin</button><a className="button secondary" href={machineDirectionsUrl(machine)} target="_blank" rel="noreferrer">Directions</a>{can('RECEIPTS_UPDATE') && <button className="text-button" onClick={() => open(machine)}>Edit</button>}{can('RECEIPTS_DELETE') && <button className="danger-link" disabled={busy} onClick={() => remove(machine)}>Remove</button>}</div>
+      <button type="button" className="vending-destination" onClick={() => showMachine(machine.id)} disabled={!hasPoint(machine)} aria-label={`Show ${machine.name} on the map`}><div className="vending-card-heading"><span className="vending-number">{index + 1}</span><h3>{machine.name}</h3></div><p>{machine.address}</p></button>{!hasPoint(machine) && <p className="vending-pin-needed">Address saved - map pin needed</p>}{machine.notes && <p className="vending-notes">{machine.notes}</p>}
+      <div className="vending-card-actions"><button className="button secondary" onClick={() => showMachine(machine.id)} disabled={!hasPoint(machine)}>Show pin</button><a className="button secondary" href={machineDirectionsUrl(machine)} target="_blank" rel="noreferrer">Directions</a>{can('RECEIPTS_UPDATE') && <button className="text-button" onClick={() => open(machine)}>Edit</button>}{can('RECEIPTS_DELETE') && <button className="danger-link" disabled={busy} onClick={() => remove(machine)}>Remove</button>}</div>
     </article>)}</div>
     {editing && <Modal title={editing.id ? 'Edit vending machine' : 'Add vending machine'} onClose={close}><form className="form vending-form" onSubmit={save}>
       <label>Machine name<input required maxLength={120} value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="Lobby snack machine"/></label>
-      <PlaceInput label="Full address" required maxLength={200} endpoint="/vending-machines/locations" value={form.address} onChange={address => { setForm(current => ({ ...current, address, latitude: null, longitude: null })); setPlacingPin(false) }} onPlaceSelected={point => setForm(current => ({ ...current, ...point }))} placeholder="Start typing a place or address"/>
-      <small>Include city and province, then select the matching address suggestion.</small>
-      <button type="button" className="button secondary" onClick={() => setPlacingPin(value => !value)}>{placingPin ? 'Hide pin picker' : hasPoint(form) ? 'Adjust map pin' : 'Place pin on map (optional)'}</button>
-      {placingPin && <div className="vending-pin-picker"><p>Zoom to the machine's location, then tap the map to place its pin. Your address stays unchanged.</p><LocationMap machines={hasPoint(form) ? [{ ...form, id: 'draft', name: form.name || 'Machine location' }] : []} center={hasPoint(form) ? [form.latitude, form.longitude] : undefined} onPick={point => setForm(current => ({ ...current, ...point }))}/>{hasPoint(form) && <p role="status">Pin selected: {form.latitude.toFixed(6)}, {form.longitude.toFixed(6)}</p>}</div>}
+      <PlaceInput label="Full address" required maxLength={200} endpoint="/vending-machines/locations" value={form.address} onChange={address => { setForm(current => ({ ...current, address, latitude: null, longitude: null })); setPlacingPin(false) }} onResolvingChange={setResolvingAddress} onPlaceSelected={point => { setForm(current => ({ ...current, ...point })); setPlacingPin(true) }} placeholder="Start typing a place or address"/>
+      <small>Search for the full street address, then select a suggestion to show the machine on the map.</small>
+      <button type="button" className="button secondary" onClick={() => setPlacingPin(value => !value)}>{placingPin ? 'Hide location map' : hasPoint(form) ? 'Show location map' : 'Choose location on map (optional)'}</button>
+      {placingPin && <div className="vending-pin-picker"><p>This pin shows where the machine is located. Tap the map to adjust its position if needed.</p><LocationMap machines={hasPoint(form) ? [{ ...form, id: 'draft', name: form.name || 'Machine location' }] : []} center={hasPoint(form) ? [form.latitude, form.longitude] : undefined} onPick={point => setForm(current => ({ ...current, ...point }))}/>{hasPoint(form) && <p role="status">Pin selected: {form.latitude.toFixed(6)}, {form.longitude.toFixed(6)}</p>}</div>}
       <label>Location notes<textarea rows={3} maxLength={1000} value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} placeholder="Floor, entrance, or access details"/></label>
       <p>We try to place a pin from your address when saving. If no exact match is available, the address is still saved and you can place the pin manually.</p>
       {formError && <p className="rfi-error" role="alert">{formError}</p>}
-      <footer><button type="button" className="button secondary" disabled={busy} onClick={close}>Cancel</button><button className="button" disabled={busy}>{busy ? 'Saving location...' : 'Save machine'}</button></footer>
+      <footer><button type="button" className="button secondary" disabled={busy} onClick={close}>Cancel</button><button className="button" disabled={busy || resolvingAddress}>{resolvingAddress ? 'Finding address...' : busy ? 'Saving location...' : 'Save machine'}</button></footer>
     </form></Modal>}
   </section>
 }

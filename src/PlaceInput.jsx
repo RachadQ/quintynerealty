@@ -4,7 +4,7 @@ import { loadGoogleMaps, googleMapsConfigured } from './googleMaps.js'
 
 const placeSuggestionCache = new Map()
 
-export default function PlaceInput({ label, value, onChange, placeholder, required = false, maxLength = 300, onPlaceSelected, endpoint = "/vehicles/place-suggestions" }) {
+export default function PlaceInput({ label, value, onChange, placeholder, required = false, maxLength = 300, onPlaceSelected, onResolvingChange, endpoint = "/vehicles/place-suggestions" }) {
   const inputId = useId()
   const numberedAddress = value.trim().match(/^(\d+[A-Za-z]?(?:-\d+[A-Za-z]?)?)\s+/)?.[1]
   const selectedAddress = useRef('')
@@ -13,7 +13,10 @@ export default function PlaceInput({ label, value, onChange, placeholder, requir
   const [error, setError] = useState('')
   const [selecting, setSelecting] = useState(false)
   const [suggestions, setSuggestions] = useState([])
-  const matchingSuggestions = suggestions.filter(item => !numberedAddress || item.label.toLowerCase().startsWith(`${numberedAddress.toLowerCase()} `))
+  // Google verifies street numbers from structured place details on selection.
+  // Prediction labels may start with a business name rather than the street number.
+  const matchingSuggestions = suggestions.filter(item => item.prediction || !numberedAddress || item.label.toLowerCase().startsWith(`${numberedAddress.toLowerCase()} `))
+  useEffect(() => { onResolvingChange?.(selecting) }, [selecting, onResolvingChange])
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
   useEffect(() => {
@@ -73,5 +76,5 @@ export default function PlaceInput({ label, value, onChange, placeholder, requir
     finally { if (version === selectionVersion.current) setSelecting(false) }
   }
   useEffect(() => () => { selectionVersion.current += 1 }, [])
-  return <label className="place-field">{label}<input id={inputId} autoComplete="off" required={required} maxLength={maxLength} value={value} onFocus={() => value.trim().length >= 6 && setOpen(true)} onBlur={() => setTimeout(() => setOpen(false), 120)} onChange={e => { selectionVersion.current += 1; setSelecting(false); onChange(e.target.value) }} placeholder={placeholder}/>{open && <div className="place-suggestions" role="listbox"><button type="button" role="option" className="use-entered-address" onMouseDown={e => e.preventDefault()} onClick={() => { selectionVersion.current += 1; setSelecting(false); setOpen(false) }}><strong>Use entered address</strong><span>{value.trim()}</span></button>{(loading || selecting) && <p className="place-search-status">{selecting ? 'Loading selected address...' : 'Searching addresses...'}</p>}{!loading && matchingSuggestions.length === 0 && <p className="place-search-status">No exact address match. Your entered address is kept.</p>}{matchingSuggestions.filter(item => item.label.toLowerCase() !== value.trim().toLowerCase()).map((item,index) => <button type="button" role="option" disabled={selecting} key={`${item.label}-${index}`} onMouseDown={e => e.preventDefault()} onClick={() => choose(item)}>{item.label}</button>)}{googleMapsConfigured && <img className="google-places-attribution" src="https://maps.gstatic.com/mapfiles/api-3/images/powered-by-google-on-white3.png" alt="Powered by Google"/>}</div>}{error && <small role="alert">{error}</small>}</label>
+  return <label className="place-field">{label}<input id={inputId} autoComplete="off" required={required} maxLength={maxLength} value={value} onFocus={() => value.trim().length >= 6 && setOpen(true)} onBlur={() => setTimeout(() => setOpen(false), 120)} onChange={e => { selectionVersion.current += 1; setSelecting(false); onChange(e.target.value) }} placeholder={placeholder}/>{open && <div className="place-suggestions" role="listbox"><button type="button" role="option" className="use-entered-address" onMouseDown={e => e.preventDefault()} onClick={() => { selectionVersion.current += 1; setSelecting(false); setOpen(false) }}><strong>Use entered address</strong><span>{value.trim()}</span></button>{(loading || selecting) && <p className="place-search-status">{selecting ? 'Loading selected address...' : 'Searching addresses...'}</p>}{!loading && !error && matchingSuggestions.length === 0 && <p className="place-search-status">No exact address match. Your entered address is kept.</p>}{matchingSuggestions.map((item,index) => <button type="button" role="option" disabled={selecting} key={`${item.label}-${index}`} onMouseDown={e => e.preventDefault()} onClick={() => choose(item)}>{item.label}</button>)}{googleMapsConfigured && <img className="google-places-attribution" src="https://maps.gstatic.com/mapfiles/api-3/images/powered-by-google-on-white3.png" alt="Powered by Google"/>}</div>}{error && <small role="alert">{error}</small>}</label>
 }
