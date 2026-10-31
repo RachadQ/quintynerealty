@@ -3,6 +3,7 @@ import LocationMap from './GoogleLocationMap.jsx'
 import { geocodeGoogleAddress, googleMapsConfigured } from './googleMaps.js'
 import { api } from './api.js'
 import PlaceInput from './PlaceInput.jsx'
+import { machineDirectionsUrl } from './machineDirections.js'
 
 const blank = { name: '', address: '', notes: '', latitude: null, longitude: null }
 const hasPoint = machine => Number.isFinite(machine.latitude) && Number.isFinite(machine.longitude)
@@ -56,8 +57,8 @@ export default function VendingMachines({ can, Modal }) {
     <LocationMap machines={visible} selected={selected} onSelect={setSelected}/>
     {!loading && !visible.length && <p className="empty">{query ? 'No machines match your search.' : 'Add your first machine with its full address to place a pin on the map.'}</p>}
     <div className="vending-library">{visible.map((machine, index) => <article className={`panel vending-card ${selected === machine.id ? 'selected' : ''}`} key={machine.id}>
-      <div className="vending-card-heading"><span className="vending-number">{index + 1}</span><h3>{machine.name}</h3></div><p>{machine.address}</p>{!hasPoint(machine) && <p className="vending-pin-needed">Address saved - map pin needed</p>}{machine.notes && <p className="vending-notes">{machine.notes}</p>}
-      <div className="vending-card-actions"><button className="button secondary" onClick={() => setSelected(machine.id)} disabled={!hasPoint(machine)}>Show pin</button><a className="button secondary" href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(hasPoint(machine) ? `${machine.latitude},${machine.longitude}` : machine.address)}`} target="_blank" rel="noreferrer">Directions</a>{can('RECEIPTS_UPDATE') && <button className="text-button" onClick={() => open(machine)}>Edit</button>}{can('RECEIPTS_DELETE') && <button className="danger-link" disabled={busy} onClick={() => remove(machine)}>Remove</button>}</div>
+      <a className="vending-destination" href={machineDirectionsUrl(machine)} target="_blank" rel="noreferrer" aria-label={`Directions to ${machine.name}, ${machine.address}`}><div className="vending-card-heading"><span className="vending-number">{index + 1}</span><h3>{machine.name}</h3></div><p>{machine.address}</p></a>{!hasPoint(machine) && <p className="vending-pin-needed">Address saved - map pin needed</p>}{machine.notes && <p className="vending-notes">{machine.notes}</p>}
+      <div className="vending-card-actions"><button className="button secondary" onClick={() => setSelected(machine.id)} disabled={!hasPoint(machine)}>Show pin</button><a className="button secondary" href={machineDirectionsUrl(machine)} target="_blank" rel="noreferrer">Directions</a>{can('RECEIPTS_UPDATE') && <button className="text-button" onClick={() => open(machine)}>Edit</button>}{can('RECEIPTS_DELETE') && <button className="danger-link" disabled={busy} onClick={() => remove(machine)}>Remove</button>}</div>
     </article>)}</div>
     {editing && <Modal title={editing.id ? 'Edit vending machine' : 'Add vending machine'} onClose={close}><form className="form vending-form" onSubmit={save}>
       <label>Machine name<input required maxLength={120} value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="Lobby snack machine"/></label>

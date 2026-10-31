@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { loadGoogleMaps, googleMapsConfigured } from './googleMaps.js'
+import { machineDirectionsUrl } from './machineDirections.js'
 
 export default function GoogleLocationMap({ machines, selected, onSelect, onPick, center }) {
   const element = useRef(null)
@@ -36,7 +37,12 @@ export default function GoogleLocationMap({ machines, selected, onSelect, onPick
       const content = document.createElement('div')
       const name = document.createElement('strong'); name.textContent = machine.name
       const address = document.createElement('p'); address.textContent = machine.address
-      content.append(name, address)
+      const directions = document.createElement('a')
+      directions.href = machineDirectionsUrl(machine)
+      directions.textContent = 'Directions'
+      directions.target = '_blank'; directions.rel = 'noreferrer'
+      directions.style.cssText = 'display:inline-flex;align-items:center;min-height:44px'
+      content.append(name, address, directions)
       marker.addListener('click', () => { callbacks.current.onSelect?.(machine.id); popup.current.setContent(content); popup.current.open({ map: map.current, anchor: marker }) })
       markers.current.set(machine.id, marker); bounds.extend(marker.position)
     })
